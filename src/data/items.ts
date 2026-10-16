@@ -30,43 +30,209 @@ export type ItemId =
   | 'eisen'
   | 'eisenwerkzeug';
 
+export type ItemCategory = 'tool' | 'food' | 'material';
+
 export interface ItemDef {
   id: ItemId;
   name: string;
+  category: ItemCategory;
+  desc: string;
+  foodValue?: number;
   tint?: number;
 }
 
 export const ITEMS: Record<ItemId, ItemDef> = {
-  beere: { id: 'beere', name: 'Beeren' },
-  stock: { id: 'stock', name: 'Stöcke' },
-  stein: { id: 'stein', name: 'Steine' },
-  fleisch: { id: 'fleisch', name: 'Rohes Fleisch' },
-  gebraten: { id: 'gebraten', name: 'Gebratenes Fleisch', tint: 0xd9a066 },
-  fell: { id: 'fell', name: 'Fell' },
-  faustkeil: { id: 'faustkeil', name: 'Faustkeil' },
-  samen: { id: 'samen', name: 'Wildkorn-Samen' },
-  getreide: { id: 'getreide', name: 'Getreide (Emmer)' },
-  hacke: { id: 'hacke', name: 'Steinhacke' },
-  sichel: { id: 'sichel', name: 'Erntesichel' },
-  lehm: { id: 'lehm', name: 'Lehm' },
-  tontopf: { id: 'tontopf', name: 'Tontopf (leer)' },
-  wasser: { id: 'wasser', name: 'Wasser im Topf', tint: 0x6ec6ff },
-  wolle: { id: 'wolle', name: 'Wolle' },
-  milch: { id: 'milch', name: 'Ziegenmilch' },
-  brot: { id: 'brot', name: 'Fladenbrot', tint: 0xe6b873 },
-  stoff: { id: 'stoff', name: 'Gewebter Stoff' },
-  salz: { id: 'salz', name: 'Salz' },
-  bernstein: { id: 'bernstein', name: 'Bernstein' },
-  spitzhacke: { id: 'spitzhacke', name: 'Spitzhacke' },
-  kupfererz: { id: 'kupfererz', name: 'Kupfererz', tint: 0xe07a45 },
-  kupfer: { id: 'kupfer', name: 'Kupferbarren' },
-  kupferbeil: { id: 'kupferbeil', name: 'Kupferbeil (Ötzi)', tint: 0xe08955 },
-  zinn: { id: 'zinn', name: 'Zinnerz' },
-  bronze: { id: 'bronze', name: 'Bronzebarren' },
-  bronzeschwert: { id: 'bronzeschwert', name: 'Bronzeschwert' },
-  eisenerz: { id: 'eisenerz', name: 'Eisenerz', tint: 0x9aa5b8 },
-  eisen: { id: 'eisen', name: 'Eisenbarren' },
-  eisenwerkzeug: { id: 'eisenwerkzeug', name: 'Eisenschmiedewerkzeug' },
+  beere: {
+    id: 'beere',
+    name: 'Waldbeeren',
+    category: 'food',
+    desc: 'Süße, reife Waldbeeren. Schnelle Stärkung für unterwegs (+12 Essen).',
+    foodValue: 12,
+  },
+  stock: {
+    id: 'stock',
+    name: 'Holzstöcke',
+    category: 'material',
+    desc: 'Trockenes Astholz zum Bauen von Lagerfeuern, Fallen und Werkzeuggriffen.',
+  },
+  stein: {
+    id: 'stein',
+    name: 'Feuersteine',
+    category: 'material',
+    desc: 'Harte Kiesel und Feuersteine. Werden zu scharfen Klingen geschlagen.',
+  },
+  fleisch: {
+    id: 'fleisch',
+    name: 'Rohes Fleisch',
+    category: 'food',
+    desc: 'Frisches Fleisch aus der Falle. Roh essbar (+15 Essen), gebraten viel besser!',
+    foodValue: 15,
+  },
+  gebraten: {
+    id: 'gebraten',
+    name: 'Gebratenes Fleisch',
+    category: 'food',
+    desc: 'Über dem Lagerfeuer knusprig gegrillt. Gibt viel Kraft (+40 Essen).',
+    foodValue: 40,
+    tint: 0xd9a066,
+  },
+  fell: {
+    id: 'fell',
+    name: 'Warmes Fell',
+    category: 'material',
+    desc: 'Dichtes Tierfell. Hielt die Jäger der Eiszeit in kalten Nächten warm.',
+  },
+  faustkeil: {
+    id: 'faustkeil',
+    name: 'Faustkeil',
+    category: 'tool',
+    desc: 'Das Schweizer Taschenmesser der Altsteinzeit: zum Schneiden, Hacken und Schaben.',
+  },
+  samen: {
+    id: 'samen',
+    name: 'Wildkorn-Samen',
+    category: 'material',
+    desc: 'Körner von Wildgetreide. Können auf gehacktem Boden ausgesät werden.',
+  },
+  getreide: {
+    id: 'getreide',
+    name: 'Getreide (Emmer)',
+    category: 'food',
+    desc: 'Urtümliches Getreide. Grundnahrungsmittel für Mehl und gebackenes Brot.',
+  },
+  hacke: {
+    id: 'hacke',
+    name: 'Steinhacke',
+    category: 'tool',
+    desc: 'Bodenhacke mit Steinblatt. Lockert den harten Waldboden für den Ackerbau.',
+  },
+  sichel: {
+    id: 'sichel',
+    name: 'Erntesichel',
+    category: 'tool',
+    desc: 'Krumme Sichel mit scharfen Steinklingen zum Schneiden von reifem Getreide.',
+  },
+  lehm: {
+    id: 'lehm',
+    name: 'Ufer-Lehm',
+    category: 'material',
+    desc: 'Feuchter, formbarer Ton vom Seeufer. Rohstoff für Töpfe und Ofenwände.',
+  },
+  tontopf: {
+    id: 'tontopf',
+    name: 'Tontopf (leer)',
+    category: 'tool',
+    desc: 'Im Ofen gebranntes Tongefäß zum Schöpfen von Wasser und Lagern von Körnern.',
+  },
+  wasser: {
+    id: 'wasser',
+    name: 'Wasser im Tontopf',
+    category: 'tool',
+    desc: 'Frisches Seewasser zum Gießen der frisch gesäten Ackerpflanzen.',
+    tint: 0x6ec6ff,
+  },
+  wolle: {
+    id: 'wolle',
+    name: 'Schaf- & Ziegenwolle',
+    category: 'material',
+    desc: 'Weiche Tierwolle von gezähmten Ziegen. Kann am Webstuhl verarbeitet werden.',
+  },
+  milch: {
+    id: 'milch',
+    name: 'Frische Ziegenmilch',
+    category: 'food',
+    desc: 'Nahrhafte Milch von gezähmten Tieren aus dem Gehege (+25 Essen).',
+    foodValue: 25,
+  },
+  brot: {
+    id: 'brot',
+    name: 'Warmes Fladenbrot',
+    category: 'food',
+    desc: 'Aus gemahlenem Emmer-Korn auf heißen Steinen gebacken (+50 Essen).',
+    foodValue: 50,
+    tint: 0xe6b873,
+  },
+  stoff: {
+    id: 'stoff',
+    name: 'Gewebter Stoff',
+    category: 'material',
+    desc: 'Am Gewichtswebstuhl geknüpftes Tuch. Weich, warm und begehrte Handelsware.',
+  },
+  salz: {
+    id: 'salz',
+    name: 'Alpensalz („Weißes Gold“)',
+    category: 'material',
+    desc: 'Kostbares Salz aus fernen Stollen. Macht Fleisch und Vorräte monatelang haltbar.',
+  },
+  bernstein: {
+    id: 'bernstein',
+    name: 'Ostsee-Bernstein',
+    category: 'material',
+    desc: 'Versteinertes Baumharz von der fernen Ostsee. Edler Schmuck und Statussymbol.',
+  },
+  spitzhacke: {
+    id: 'spitzhacke',
+    name: 'Bergbau-Spitzhacke',
+    category: 'tool',
+    desc: 'Schwere Hacke zum Herausschlagen von Kupfer- und Eisenerzen aus dem Fels.',
+  },
+  kupfererz: {
+    id: 'kupfererz',
+    name: 'Kupfererz (Malachit)',
+    category: 'material',
+    desc: 'Grünlich schimmerndes Erz von der Bergwand. Schmilzt bei rund 1.085 °C.',
+    tint: 0xe07a45,
+  },
+  kupfer: {
+    id: 'kupfer',
+    name: 'Kupferbarren',
+    category: 'material',
+    desc: 'Im Rennofen verhüttetes Reinkupfer. Weich, aber erstmals gießbar!',
+  },
+  kupferbeil: {
+    id: 'kupferbeil',
+    name: 'Kupferbeil (Ötzi)',
+    category: 'tool',
+    desc: 'Das berühmte Statussymbol der Kupferzeit – exakt wie das Beil der Gletschermumie Ötzi.',
+    tint: 0xe08955,
+  },
+  zinn: {
+    id: 'zinn',
+    name: 'Zinnerz (Kassiterit)',
+    category: 'material',
+    desc: 'Sehr seltenes Metallerz von Fernhändlern. Zusammen mit Kupfer entsteht Bronze!',
+  },
+  bronze: {
+    id: 'bronze',
+    name: 'Bronzebarren',
+    category: 'material',
+    desc: 'Harte Legierung aus 9 Teilen Kupfer und 1 Teil Zinn. Ein gewaltiger Epochensprung.',
+  },
+  bronzeschwert: {
+    id: 'bronzeschwert',
+    name: 'Bronzeschwert',
+    category: 'tool',
+    desc: 'In Steinformen gegossene, scharfe Waffe der Bronzezeit-Krieger und Häuptlinge.',
+  },
+  eisenerz: {
+    id: 'eisenerz',
+    name: 'Eisenerz (Roteisen)',
+    category: 'material',
+    desc: 'Dunkler Erzstein aus dem Bergstollen. Benötigt über 1.500 °C Gluthitze.',
+    tint: 0x9aa5b8,
+  },
+  eisen: {
+    id: 'eisen',
+    name: 'Eisenbarren',
+    category: 'material',
+    desc: 'Zähes, schmiedbares Roheisen. Überall in der Natur vorkommend und extrem widerstandsfähig.',
+  },
+  eisenwerkzeug: {
+    id: 'eisenwerkzeug',
+    name: 'Eisenschmiedewerkzeug',
+    category: 'tool',
+    desc: 'Am Amboss geschmiedete Werkzeuge der Eisenzeit. Revolutionierten Landbau und Handwerk.',
+  },
 };
 
 export type RecipeId =

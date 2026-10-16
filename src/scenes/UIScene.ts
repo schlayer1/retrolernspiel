@@ -43,6 +43,7 @@ type ActivePanel =
   | 'none'
   | 'start'
   | 'pause'
+  | 'bag'
   | 'craft'
   | 'trade'
   | 'lexicon'
@@ -56,6 +57,7 @@ type ActivePanel =
  * Gestochen scharfe HTML/CSS-Oberfläche über der 16-Bit-Spielwelt:
  * Startscreen mit Spielgrafik-Vorschau & Charakterwahl (Mann/Frau + Name),
  * Pausescreen mit Spielzeit & Abenteuer-Statistiken, HUD mit Ziel-Kompass,
+ * kompakter Hotbar & didaktischem Rucksack-Menü (I),
  * Dialoge mit Vorlese-Funktion, Entdecker-Karten, Lexikon, Zeitstrahl & Urkunde.
  */
 export class UIScene extends Phaser.Scene {
@@ -88,6 +90,8 @@ export class UIScene extends Phaser.Scene {
   private lexSelected = 'sippe';
   private milestoneQueue: string[] = [];
   private startSelectedChapter = 1;
+  private bagTab: 'all' | 'tool' | 'food' | 'material' = 'all';
+  private bagSelected: ItemId = 'faustkeil';
 
   private toastQueue: string[] = [];
   private toastBusy = false;
@@ -140,6 +144,8 @@ export class UIScene extends Phaser.Scene {
     const kb = this.input.keyboard!;
     kb.disableGlobalCapture();
     kb.on('keydown-P', () => !this.isTyping() && this.togglePanel('pause'));
+    kb.on('keydown-I', () => !this.isTyping() && this.togglePanel('bag'));
+    kb.on('keydown-B', () => !this.isTyping() && this.togglePanel('bag'));
     kb.on('keydown-C', () => !this.isTyping() && this.togglePanel('craft'));
     kb.on('keydown-H', () => !this.isTyping() && this.togglePanel('trade'));
     kb.on('keydown-L', () => !this.isTyping() && this.togglePanel('lexicon'));
@@ -170,7 +176,7 @@ export class UIScene extends Phaser.Scene {
 
     this.refreshHotbar();
     const pParam = new URLSearchParams(location.search).get('panel') as ActivePanel | null;
-    if (pParam && ['start', 'pause', 'craft', 'trade', 'lexicon', 'timeline', 'chapter', 'cert'].includes(pParam)) {
+    if (pParam && ['start', 'pause', 'bag', 'craft', 'trade', 'lexicon', 'timeline', 'chapter', 'cert'].includes(pParam)) {
       this.togglePanel(pParam);
     } else if (!state.skipStartScreen) {
       this.startSelectedChapter = state.chapter || 1;
@@ -212,6 +218,7 @@ export class UIScene extends Phaser.Scene {
           </div>
           <div class="hud-btn-row">
             <button class="retro-btn" data-act="pause" style="border-color:#fbbf24;"><span class="key-badge">P</span> ⏸ Pause</button>
+            <button class="retro-btn" data-act="bag" style="border-color:#ffd86b;"><span class="key-badge">I</span> 🎒 Beutel</button>
             <button class="retro-btn" data-act="craft"><span class="key-badge">C</span> Handwerk</button>
             <button class="retro-btn" data-act="trade"><span class="key-badge">H</span> Handel</button>
             <button class="retro-btn" data-act="lexicon"><span class="key-badge">L</span> Lexikon</button>
@@ -227,7 +234,13 @@ export class UIScene extends Phaser.Scene {
 
       <div class="hud-bottom">
         <div class="hud-hint-pill" id="hud-hint" style="display:none"></div>
-        <div class="hud-hotbar" id="hud-hotbar"></div>
+        <div class="hud-bottom-row">
+          <div class="hud-hotbar" id="hud-hotbar"></div>
+          <button class="hotbar-bag-btn" id="hud-bag-btn" data-act="bag">
+            <span>🎒 Beutel</span>
+            <span class="key-badge" style="background:#e8c170;color:#1a1208;font-size:10px;padding:1px 4px;">I</span>
+          </button>
+        </div>
       </div>
 
       <div class="dialog-dock" id="dlg-dock">
@@ -347,17 +360,39 @@ export class UIScene extends Phaser.Scene {
   private refreshHotbar(): void {
     if (!this.hotbarEl) return;
     const parts: string[] = [];
+    let totalItems = 0;
     (Object.keys(ITEMS) as ItemId[]).forEach((id) => {
       const n = state.count(id);
       if (n <= 0) return;
+      totalItems += n;
+      const item = ITEMS[id];
       parts.push(`
-        <div class="hotbar-slot" title="${escapeHtml(ITEMS[id].name)}">
-          <img class="pixel-icon" src="assets/icons/${id}.png" alt="${escapeHtml(ITEMS[id].name)}" style="width:18px;height:18px;" />
-          <span>${escapeHtml(ITEMS[id].name)}: <strong>${n}</strong></span>
+        <div class="hotbar-icon-slot" data-open-bag="${id}" title="${escapeHtml(item.name)}: ${n} (${escapeHtml(item.desc)})">
+          <img src="assets/icons/${id}.png" alt="${escapeHtml(item.name)}" />
+          <span class="hotbar-slot-qty">${n > 1 ? n : ''}</span>
         </div>
       `);
     });
     this.hotbarEl.innerHTML = parts.join('');
+
+    const bagBtn = this.root.querySelector('#hud-bag-btn');
+    if (bagBtn) {
+      bagBtn.innerHTML = `
+        <span>🎒 Beutel</span>
+        <span style="background:#e8c170;color:#1a1208;font-size:11px;font-weight:900;padding:1px 5px;border-radius:99px;">${totalItems}</span>
+      `;
+    }
+
+    this.hotbarEl.querySelectorAll('[data-open-bag]').forEach((slot) => {
+      slot.addEventListener('click', () => {
+        const id = (slot as HTMLElement).dataset.openBag as ItemId;
+        if (id) {
+          this.bagSelected = id;
+          if (ITEMS[id]) this.bagTab = ITEMS[id].category;
+        }
+        this.togglePanel('bag');
+      });
+    });
   }
 
   // ------------------------------------------------------------ Toasts
@@ -421,6 +456,7 @@ export class UIScene extends Phaser.Scene {
     if (closeBtn) closeBtn.style.display = this.activePanel === 'start' ? 'none' : 'inline-flex';
     if (this.activePanel === 'start') this.renderStartModal();
     else if (this.activePanel === 'pause') this.renderPauseModal();
+    else if (this.activePanel === 'bag') this.renderBagModal();
     else if (this.activePanel === 'craft') this.renderCraft();
     else if (this.activePanel === 'trade') this.renderTrade();
     else if (this.activePanel === 'lexicon') this.renderLexicon();
@@ -552,6 +588,177 @@ export class UIScene extends Phaser.Scene {
       this.closePanels();
       state.startChapter(i + 1);
     }
+  }
+
+  // ------------------------------------------------------------ Rucksack & Vorratsbeutel (I)
+
+  private renderBagModal(): void {
+    this.modalCardEl.className = 'modal-card';
+    this.modalTitleEl.textContent = '🎒 Dein Vorratsbeutel & Rucksack (I)';
+
+    const ownedIds = (Object.keys(ITEMS) as ItemId[]).filter((id) => state.count(id) > 0);
+    const totalCount = ownedIds.reduce((sum, id) => sum + state.count(id), 0);
+
+    const tabs: Array<{ id: 'all' | 'tool' | 'food' | 'material'; label: string; count: number }> = [
+      { id: 'all', label: '🎒 Alle Vorräte', count: ownedIds.length },
+      { id: 'tool', label: '⚒️ Werkzeuge & Waffen', count: ownedIds.filter((id) => ITEMS[id].category === 'tool').length },
+      { id: 'food', label: '🥖 Nahrung & Ernte', count: ownedIds.filter((id) => ITEMS[id].category === 'food').length },
+      { id: 'material', label: '🪵 Rohstoffe & Erze', count: ownedIds.filter((id) => ITEMS[id].category === 'material').length },
+    ];
+
+    const tabHtml = tabs
+      .map(
+        (t) => `
+          <button class="bag-tab-btn ${this.bagTab === t.id ? 'active' : ''}" data-bag-tab="${t.id}">
+            ${escapeHtml(t.label)} (${t.count})
+          </button>
+        `,
+      )
+      .join('');
+
+    const filtered = ownedIds.filter((id) => this.bagTab === 'all' || ITEMS[id].category === this.bagTab);
+
+    if (!filtered.includes(this.bagSelected) && filtered.length > 0) {
+      this.bagSelected = filtered[0];
+    }
+
+    const itemsGridHtml =
+      filtered.length > 0
+        ? filtered
+            .map((id) => {
+              const item = ITEMS[id];
+              const count = state.count(id);
+              const active = this.bagSelected === id;
+              return `
+                <div class="bag-item-card ${active ? 'active' : ''}" data-select-item="${id}">
+                  <span class="bag-item-count-badge">${count}×</span>
+                  <img src="assets/icons/${id}.png" alt="${escapeHtml(item.name)}" />
+                  <div class="bag-item-title">${escapeHtml(item.name)}</div>
+                </div>
+              `;
+            })
+            .join('')
+        : `<div style="grid-column: 1 / -1; padding: 30px 10px; text-align: center; color: #786655; font-size: 14px;">
+            In dieser Kategorie trägst du gerade keine Gegenstände bei dir.
+          </div>`;
+
+    const curItem = ITEMS[this.bagSelected];
+    const curCount = curItem ? state.count(this.bagSelected) : 0;
+
+    let detailHtml = '';
+    if (curItem && curCount > 0) {
+      const catClass = `tag-${curItem.category}`;
+      const catLabel =
+        curItem.category === 'tool' ? 'Werkzeug' : curItem.category === 'food' ? 'Nahrung' : 'Rohstoff';
+
+      let actionBtn = '';
+      if (curItem.foodValue) {
+        actionBtn = `
+          <button class="retro-btn" id="bag-eat-btn" style="background:#22c55e;color:#052e16;border-color:#86efac;font-size:14px;padding:8px 14px;font-weight:800;">
+            🍴 Jetzt essen (+${curItem.foodValue} Hunger)
+          </button>
+        `;
+      } else if (curItem.category === 'tool') {
+        actionBtn = `
+          <div style="font-size:12.5px;color:#166534;font-weight:700;background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:6px 10px;text-align:center;">
+            ✓ Dieses Werkzeug ist automatisch ausgerüstet!
+          </div>
+        `;
+      } else {
+        actionBtn = `
+          <button class="retro-btn" id="bag-craft-btn" style="padding:6px 12px;font-size:12.5px;">
+            🔨 Passende Rezepte öffnen (C)
+          </button>
+        `;
+      }
+
+      detailHtml = `
+        <div class="bag-detail-card">
+          <div class="bag-detail-header">
+            <img src="assets/icons/${curItem.id}.png" alt="${escapeHtml(curItem.name)}" />
+            <div>
+              <span class="bag-category-tag ${catClass}">${catLabel}</span>
+              <div style="font-size:17px;font-weight:900;color:#3b2310;">${escapeHtml(curItem.name)}</div>
+              <div style="font-size:13px;font-weight:800;color:#b45309;">Bestand im Beutel: ${curCount} Stück</div>
+            </div>
+          </div>
+          <div style="font-size:14px;color:#2a1d10;line-height:1.55;background:#fefbf2;border:1px solid #e6d5b8;border-radius:6px;padding:10px;">
+            <strong style="color:#7a3b10;">Geschichts-Wissen:</strong><br/>
+            ${highlightTerms(curItem.desc)}
+          </div>
+          <div style="margin-top:auto;display:flex;flex-direction:column;gap:6px;">
+            ${actionBtn}
+          </div>
+        </div>
+      `;
+    } else {
+      detailHtml = `
+        <div class="bag-detail-card" style="align-items:center;justify-content:center;text-align:center;color:#786655;">
+          <div style="font-size:36px;margin-bottom:8px;">🎒</div>
+          <div style="font-size:14px;font-weight:700;">Wähle einen Gegenstand aus dem Beutel aus, um seine Geschichte zu erfahren.</div>
+        </div>
+      `;
+    }
+
+    this.modalBodyEl.innerHTML = `
+      <div class="bag-tabs">${tabHtml}</div>
+      <div class="bag-layout">
+        <div class="bag-items-grid">${itemsGridHtml}</div>
+        ${detailHtml}
+      </div>
+    `;
+
+    this.modalFooterEl.innerHTML = `
+      <div style="font-size:13px;color:#5a3818;font-weight:700;">
+        Gesamtbestand: <strong>${totalCount} Gegenstände</strong> im Beutel
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="retro-btn" id="bag-to-craft">🔨 Handwerk (C)</button>
+        <button class="retro-btn" id="bag-to-trade">⚖️ Tauschhandel (H)</button>
+        <button class="retro-btn" id="bag-close-btn" style="background:#3b5e2b;color:#fff;">Weiter spielen (Esc)</button>
+      </div>
+    `;
+
+    this.modalBodyEl.querySelectorAll('[data-bag-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.bagTab = (btn as HTMLElement).dataset.bagTab as 'all' | 'tool' | 'food' | 'material';
+        this.renderBagModal();
+      });
+    });
+
+    this.modalBodyEl.querySelectorAll('[data-select-item]').forEach((card) => {
+      card.addEventListener('click', () => {
+        this.bagSelected = (card as HTMLElement).dataset.selectItem as ItemId;
+        this.renderBagModal();
+      });
+    });
+
+    const eatBtn = this.modalBodyEl.querySelector('#bag-eat-btn');
+    if (eatBtn) {
+      eatBtn.addEventListener('click', () => {
+        this.pushToast(state.eat());
+        this.renderBagModal();
+        this.refreshHotbar();
+      });
+    }
+
+    const craftBtn = this.modalBodyEl.querySelector('#bag-craft-btn');
+    if (craftBtn) {
+      craftBtn.addEventListener('click', () => {
+        this.activePanel = 'craft';
+        this.renderActivePanel();
+      });
+    }
+
+    this.modalFooterEl.querySelector('#bag-to-craft')!.addEventListener('click', () => {
+      this.activePanel = 'craft';
+      this.renderActivePanel();
+    });
+    this.modalFooterEl.querySelector('#bag-to-trade')!.addEventListener('click', () => {
+      this.activePanel = 'trade';
+      this.renderActivePanel();
+    });
+    this.modalFooterEl.querySelector('#bag-close-btn')!.addEventListener('click', () => this.closePanels());
   }
 
   // ------------------------------------------------------------ Handwerk (C)
