@@ -26,4 +26,7 @@ const game = new Phaser.Game({
   scene: [BootScene, WorldScene, UIScene, CaveScene, LonghouseScene],
 });
 
-(window as unknown as { game: Phaser.Game }).game = game;
+import { state } from './systems/GameState';
+
+(window as unknown as { game: Phaser.Game; state: typeof state }).game = game;
+(window as unknown as { game: Phaser.Game; state: typeof state }).state = state;

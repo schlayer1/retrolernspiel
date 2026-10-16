@@ -56,6 +56,9 @@ export class LonghouseScene extends Phaser.Scene {
     this.obstacles = this.physics.add.staticGroup();
 
     // 1. Retina-DOM-Label-Layer initialisieren
+    const wl = document.getElementById('world-labels');
+    if (wl) wl.style.display = 'none';
+
     const existingLayer = document.getElementById('longhouse-labels');
     this.labelLayer = existingLayer ?? document.createElement('div');
     this.labelLayer.id = 'longhouse-labels';
@@ -313,9 +316,8 @@ export class LonghouseScene extends Phaser.Scene {
     this.physics.add.existing(tableZone, true);
     this.obstacles.add(tableZone);
 
-    // 5. Sippenmutter Alva am Herdfeuer (echter 16-Bit-Charakter-Sprite aus characters.png!)
-    const elderSpr = this.add.sprite(140, 135, 'characters_all', 6).setDepth(60);
-    elderSpr.play('alva_look');
+    // 5. Sippenmutter Alva am Herdfeuer (vollwertiger 16x32-Charakter)
+    const elderSpr = this.add.sprite(140, 135, 'npc_alva', 0).setDepth(60);
     this.nodes.push({
       kind: 'elder',
       x: 140,
@@ -448,6 +450,8 @@ export class LonghouseScene extends Phaser.Scene {
     this.exiting = true;
     sfx.step();
     if (this.labelLayer) this.labelLayer.style.display = 'none';
+    const wl = document.getElementById('world-labels');
+    if (wl) wl.style.display = 'block';
     this.cameras.main.fadeOut(350, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.stop('Longhouse');

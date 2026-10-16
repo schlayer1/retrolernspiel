@@ -56,6 +56,9 @@ export class CaveScene extends Phaser.Scene {
     this.obstacles = this.physics.add.staticGroup();
 
     // 1. Retina-DOM-Label-Layer initialisieren
+    const wl = document.getElementById('world-labels');
+    if (wl) wl.style.display = 'none';
+
     const existingLayer = document.getElementById('cave-labels');
     this.labelLayer = existingLayer ?? document.createElement('div');
     this.labelLayer.id = 'cave-labels';
@@ -484,6 +487,8 @@ export class CaveScene extends Phaser.Scene {
     this.exiting = true;
     sfx.step();
     if (this.labelLayer) this.labelLayer.style.display = 'none';
+    const wl = document.getElementById('world-labels');
+    if (wl) wl.style.display = 'block';
     this.cameras.main.fadeOut(350, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.stop('Cave');

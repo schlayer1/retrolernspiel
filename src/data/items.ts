@@ -336,6 +336,7 @@ export interface BuildingDef {
   desc: string;
   helperName: string;
   helperRole: string;
+  helperSprite?: string;
   minChapter: number;
   x: number;
   y: number;
@@ -349,6 +350,7 @@ export const BUILDINGS: BuildingDef[] = [
     desc: 'Brennt feste Keramik aus Lehm',
     helperName: 'Mila (Töpferin)',
     helperRole: 'Schenkt dir bei Bedarf frische Tontöpfe.',
+    helperSprite: 'npc_mila',
     minChapter: 3,
     x: 330,
     y: 250,
@@ -360,6 +362,7 @@ export const BUILDINGS: BuildingDef[] = [
     desc: 'Holzzaun für gezähmte Ziegen',
     helperName: 'Tarek (Hirte)',
     helperRole: 'Hütet die Ziegen im Gehege.',
+    helperSprite: 'npc_tarek',
     minChapter: 3,
     x: 530,
     y: 350,
@@ -371,6 +374,7 @@ export const BUILDINGS: BuildingDef[] = [
     desc: 'Schützt Ernte vor Nässe und Mäusen',
     helperName: 'Kora (Müllerin)',
     helperRole: 'Mahlt Korn auf dem Mahlstein zu Fladenbrot.',
+    helperSprite: 'npc_kora',
     minChapter: 3,
     x: 330,
     y: 340,
@@ -393,6 +397,7 @@ export const BUILDINGS: BuildingDef[] = [
     desc: 'Webt Wolle zu warmen Stoffen (Kap. 4+)',
     helperName: 'Jana (Weberin)',
     helperRole: 'Webt aus Ziegenwolle feine Stoffe für Kleidung und Tauschhandel.',
+    helperSprite: 'npc_jana',
     minChapter: 4,
     x: 260,
     y: 295,
@@ -404,6 +409,7 @@ export const BUILDINGS: BuildingDef[] = [
     desc: 'Schmilzt Kupfer und Bronze mit Blasebalg (Kap. 5+)',
     helperName: 'Barak (Schmelzer)',
     helperRole: 'Hält die Glut mit Blasebälgen über 1.000 °C heiß für Kupfer & Bronze.',
+    helperSprite: 'npc_barak',
     minChapter: 5,
     x: 260,
     y: 215,
@@ -415,6 +421,7 @@ export const BUILDINGS: BuildingDef[] = [
     desc: 'Rennofen und Amboss für die Eisenzeit (Kap. 6)',
     helperName: 'Torin (Schmied)',
     helperRole: 'Schmiedet glühendes Eisen mit dem Hammer zu Werkzeugen.',
+    helperSprite: 'npc_barak',
     minChapter: 6,
     x: 335,
     y: 175,

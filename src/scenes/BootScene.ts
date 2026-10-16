@@ -126,8 +126,13 @@ export class BootScene extends Phaser.Scene {
     this.load.image('inner_tiles', 'assets/gfx/Inner.png');
     this.load.spritesheet('goat', 'assets/gfx/goat.png', { frameWidth: 80, frameHeight: 80 });
     this.load.spritesheet('player', 'assets/gfx/character.png', { frameWidth: 16, frameHeight: 32 });
-    this.load.spritesheet('npc', 'assets/gfx/NPC_test.png', { frameWidth: 16, frameHeight: 32 });
-    this.load.spritesheet('characters_all', 'assets/gfx/characters.png', { frameWidth: 16, frameHeight: 32 });
+    this.load.spritesheet('characters_all', 'assets/gfx/characters.png', { frameWidth: 16, frameHeight: 16 });
+
+    // Vollwertige 16-Bit-Charaktere für alle Dorf-NPCs (16x32)
+    const npcIds = ['ota', 'alva', 'barak', 'mila', 'jana', 'kora', 'tarek', 'enki'];
+    npcIds.forEach((id) => {
+      this.load.spritesheet(`npc_${id}`, `assets/gfx/npcs/npc_${id}.png`, { frameWidth: 16, frameHeight: 32 });
+    });
 
     // Hochwertige Möbel & Props
     this.load.image('prop_bed', 'assets/props/bed.png');
@@ -222,19 +227,13 @@ export class BootScene extends Phaser.Scene {
 
     this.anims.create({
       key: 'alva_idle',
-      frames: [{ key: 'characters_all', frame: 6 }],
+      frames: [{ key: 'npc_alva', frame: 0 }],
       frameRate: 1,
     });
     this.anims.create({
-      key: 'alva_look',
-      frames: [
-        { key: 'characters_all', frame: 6 },
-        { key: 'characters_all', frame: 18 },
-        { key: 'characters_all', frame: 6 },
-        { key: 'characters_all', frame: 30 },
-      ],
-      frameRate: 2,
-      repeat: -1,
+      key: 'ota_idle',
+      frames: [{ key: 'npc_ota', frame: 0 }],
+      frameRate: 1,
     });
 
     const chParam = Number(params.get('kapitel'));

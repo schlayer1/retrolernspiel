@@ -378,8 +378,8 @@ export class WorldScene extends Phaser.Scene {
       const mx = 400;
       const my = 478;
       this.add.image(mx, my - 18, 'overworld', 'market_stall').setScale(0.65).setDepth(my - 6);
-      const mNode = this.addNode('merchant', 'npc', undefined, mx, my, true);
-      mNode.sprite.setTint(0xffc978).setDepth(my + 14);
+      const mNode = this.addNode('merchant', 'npc_enki', undefined, mx, my, true);
+      mNode.sprite.setDepth(my + 14);
       this.addLabel(mx, my - 42, 'Fernhändler Enki (Tauschhandel)', '#ffd86b');
     }
 
@@ -427,11 +427,11 @@ export class WorldScene extends Phaser.Scene {
     if (b.id === 'toepferofen') {
       n.sprite.setTexture('kiln');
       n.sprite.setDepth(b.y + 12);
-      this.spawnHelper(b.x + 24, b.y + 4, b.helperName, 0xe8b598);
+      this.spawnHelper(b.x + 24, b.y + 4, b.helperName, b.helperSprite ?? 'npc_mila');
     } else if (b.id === 'speicher') {
       n.sprite.setTexture('overworld', 'speicher_hut');
       n.sprite.setDepth(b.y + 18);
-      this.spawnHelper(b.x + 26, b.y + 10, b.helperName, 0xf2d399);
+      this.spawnHelper(b.x + 26, b.y + 10, b.helperName, b.helperSprite ?? 'npc_kora');
     } else if (b.id === 'langhaus') {
       n.sprite.setTexture('overworld', 'langhaus');
       n.sprite.setDepth(b.y + 30);
@@ -445,24 +445,24 @@ export class WorldScene extends Phaser.Scene {
         this.add.image(b.x + dx, b.y - 18, 'overworld', 'fence_h').setDepth(b.y - 10);
         this.add.image(b.x + dx, b.y + 22, 'overworld', 'fence_h').setDepth(b.y + 24);
       }
-      this.spawnHelper(b.x - 36, b.y + 4, b.helperName, 0xc2d9a3);
+      this.spawnHelper(b.x - 36, b.y + 4, b.helperName, b.helperSprite ?? 'npc_tarek');
     } else if (b.id === 'webstuhl') {
       n.sprite.setTexture('loom');
       n.sprite.setDepth(b.y + 12);
-      this.spawnHelper(b.x - 22, b.y + 6, b.helperName, 0xf5b8d0);
+      this.spawnHelper(b.x - 22, b.y + 6, b.helperName, b.helperSprite ?? 'npc_jana');
     } else if (b.id === 'schmelzofen') {
       n.sprite.setTexture('smelter');
       n.sprite.setDepth(b.y + 14);
-      this.spawnHelper(b.x - 24, b.y + 6, b.helperName, 0xffaa77);
+      this.spawnHelper(b.x - 24, b.y + 6, b.helperName, b.helperSprite ?? 'npc_barak');
     } else if (b.id === 'schmiede') {
       n.sprite.setTexture('forge');
       n.sprite.setDepth(b.y + 14);
-      this.spawnHelper(b.x - 26, b.y + 6, b.helperName, 0xa8c4e0);
+      this.spawnHelper(b.x - 26, b.y + 6, b.helperName, b.helperSprite ?? 'npc_barak');
     }
   }
 
-  private spawnHelper(x: number, y: number, name: string, tint: number): void {
-    const h = this.add.sprite(x, y, 'npc', 0).setTint(tint).setDepth(y + 12);
+  private spawnHelper(x: number, y: number, name: string, spriteKey: string): void {
+    const h = this.add.sprite(x, y, spriteKey, 0).setDepth(y + 12);
     void h;
     this.addLabel(x, y - 18, name.split(' ')[0], '#d8f0ff');
   }
@@ -499,9 +499,8 @@ export class WorldScene extends Phaser.Scene {
   private placeOta(): void {
     const x = (MAP_W * TILE) / 2 + 48;
     const y = (MAP_H * TILE) / 2 - 10;
-    const sprite = this.physics.add.staticSprite(x, y, 'characters_all', 6);
+    const sprite = this.physics.add.staticSprite(x, y, 'npc_ota', 0);
     sprite.setDepth(y + 14);
-    sprite.anims.play('alva_look');
     (sprite.body as Phaser.Physics.Arcade.StaticBody).setSize(10, 8).setOffset(3, 22);
     sprite.refreshBody();
     this.obstacles.add(sprite);
