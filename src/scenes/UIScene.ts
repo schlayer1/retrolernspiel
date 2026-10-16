@@ -1351,8 +1351,8 @@ export class UIScene extends Phaser.Scene {
 
     this.modalBodyEl.innerHTML = `
       <div style="background:linear-gradient(135deg,#362208 0%,#54350d 100%);border:2.5px solid #fbbf24;border-radius:10px;padding:14px 18px;color:#fff;margin-bottom:12px;display:flex;align-items:center;gap:16px;">
-        <div style="font-size:46px;line-height:1;background:#261806;border:2px solid #e8c170;border-radius:12px;width:68px;height:68px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          ${relic.icon}
+        <div style="background:#261806;border:2px solid #e8c170;border-radius:12px;width:68px;height:68px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <img src="${relic.image}" alt="${escapeHtml(relic.title)}" style="width:48px;height:48px;image-rendering:pixelated;object-fit:contain;">
         </div>
         <div>
           <div style="font-size:11px;font-weight:900;text-transform:uppercase;color:#fde68a;letter-spacing:1px;">
@@ -1534,7 +1534,9 @@ export class UIScene extends Phaser.Scene {
             const answered = state.relicQuizAnswered.includes(rel.id);
             return `
               <div class="relic-card ${found ? 'found' : 'locked'}" title="${escapeHtml(rel.title)} (${escapeHtml(rel.epoch)})">
-                <span class="relic-icon-big">${found ? rel.icon : '❓'}</span>
+                <span class="relic-icon-big">
+                  ${found ? `<img src="${rel.image}" alt="${escapeHtml(rel.title)}" style="width:30px;height:30px;image-rendering:pixelated;object-fit:contain;vertical-align:middle;">` : '❓'}
+                </span>
                 <span class="relic-name">${escapeHtml(found ? rel.title : 'Unentdeckt')}</span>
                 <span style="font-size:10.5px;color:${answered ? '#15803d' : '#854d0e'};font-weight:700;">
                   ${found ? (answered ? '✓ Erforscht' : 'Quiz offen') : 'Verborgen'}

@@ -42,15 +42,15 @@ export class LonghouseScene extends Phaser.Scene {
     this.nodes = [];
     this.obstacles = this.physics.add.staticGroup();
 
-    // 1. Raum rendern (Holzboden, Blockhaus-Wände)
+    // 1. Innenraum mit echten Holzbalken, Dielen und Steinböden rendern
     this.buildHouseMap();
 
-    // 2. Interaktive Objekte
+    // 2. Interaktive Knoten (Schlaffelle, Sippenfeuer, Truhe, Sippenmutter Alva, Ausgang)
     this.spawnHouseNodes();
 
-    // 3. Spieler platzieren (vor der Eingangstür im Süden)
-    const startX = 208;
-    const startY = 245;
+    // 3. Spieler platzieren (Start beim Eingang)
+    const startX = (HOUSE_W * TILE) / 2;
+    const startY = (HOUSE_H - 2) * TILE - 8;
     const texKey = state.playerGender === 'female' ? 'player_female' : 'player';
     this.player = this.physics.add.sprite(startX, startY, texKey, 0);
     this.player.body!.setSize(8, 6).setOffset(4, 20);
@@ -70,7 +70,7 @@ export class LonghouseScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(150);
 
-    // 4. Kamera
+    // 4. Kamera einrichten
     this.cameras.main.setBounds(0, 0, HOUSE_W * TILE, HOUSE_H * TILE);
     this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
     this.cameras.main.setRoundPixels(true);
@@ -80,13 +80,14 @@ export class LonghouseScene extends Phaser.Scene {
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE') as typeof this.wasd;
 
-    state.emit('toast', 'Du betrittst das geschützte Langhaus. Angenehme Wärme empfängt dich!');
-    sfx.step();
+    state.emit('toast', 'Du betrittst das warme Langhaus der Sippe.');
+    sfx.door?.() ?? sfx.step();
   }
 
   update(): void {
     if (this.exiting || this.sleeping) return;
 
+    // Spieler-Bewegung
     const baseSpeed = 80 * state.moveSpeedMultiplier;
     let vx = 0;
     let vy = 0;
@@ -113,6 +114,7 @@ export class LonghouseScene extends Phaser.Scene {
 
     this.player.setVelocity(vx, vy);
 
+    // Animation & Label
     const isFemale = state.playerGender === 'female';
     const animPfx = isFemale ? 'female_' : '';
     if (vx < 0) this.player.anims.play(`${animPfx}walk_left`, true);
@@ -123,6 +125,7 @@ export class LonghouseScene extends Phaser.Scene {
 
     this.playerLabel.setPosition(this.player.x, this.player.y - 22);
 
+    // Interaktions-Check
     this.checkInteractions();
   }
 
@@ -132,48 +135,68 @@ export class LonghouseScene extends Phaser.Scene {
       .setOrigin(0)
       .setDepth(0);
 
-    const g = this.add.graphics();
-    // Dunkler Außenbereich
-    g.fillStyle(0x140e0a, 1).fillRect(0, 0, HOUSE_W * TILE, HOUSE_H * TILE);
-
-    // Warmer Holzboden (Bohlen)
-    g.fillStyle(0x6e492b, 1).fillRect(32, 32, (HOUSE_W - 4) * TILE, (HOUSE_H - 4) * TILE);
-    // Holzdielen-Muster
-    g.fillStyle(0x5a391e, 0.4);
-    for (let y = 32; y < (HOUSE_H - 2) * TILE; y += 16) {
-      g.fillRect(32, y, (HOUSE_W - 4) * TILE, 1);
+    // 1. Warmer Dielenboden aus echten Holzkacheln
+    const woodPlanks = ['wood_floor_1', 'wood_floor_2', 'wood_floor_3', 'wood_floor_1'];
+    for (let ty = 0; ty < HOUSE_H; ty++) {
+      for (let tx = 0; tx < HOUSE_W; tx++) {
+        const idx = (tx * 3 + ty * 7) % woodPlanks.length;
+        rt.drawFrame('inner_tiles', woodPlanks[idx], tx * TILE, ty * TILE);
+      }
     }
 
-    // Wandbalken (Umrandung)
-    g.fillStyle(0x3e2413, 1);
-    g.fillRect(0, 0, HOUSE_W * TILE, 36); // Nordwand
-    g.fillRect(0, 0, 32, HOUSE_H * TILE); // Westwand
-    g.fillRect((HOUSE_W - 2) * TILE, 0, 32, HOUSE_H * TILE); // Ostwand
-    g.fillRect(0, (HOUSE_H - 2) * TILE, 176, 32); // Südwand links
-    g.fillRect(240, (HOUSE_H - 2) * TILE, 176, 32); // Südwand rechts
+    // 2. Feuerfester Steinboden rund um den Herd
+    for (let ty = 6; ty <= 10; ty++) {
+      for (let tx = 9; tx <= 13; tx++) {
+        rt.drawFrame('inner_tiles', 'stone_floor', tx * TILE, ty * TILE);
+      }
+    }
 
-    // Schlaf-Felle im Nordwesten
-    g.fillStyle(0xd97706, 0.6).fillRoundedRect(44, 44, 90, 50, 8);
-    g.fillStyle(0xfde68a, 0.4).fillRoundedRect(50, 50, 78, 38, 6);
+    // 3. Authentische Holzbalken-Wände
+    // Nordwand (Rows 0..2)
+    for (let tx = 0; tx < HOUSE_W; tx++) {
+      const topF = tx === 0 ? 'wall_corner_tl' : tx === HOUSE_W - 1 ? 'wall_corner_tr' : 'wall_top';
+      rt.drawFrame('inner_tiles', topF, tx * TILE, 0);
+      rt.drawFrame('inner_tiles', 'wall_mid', tx * TILE, 16);
+      rt.drawFrame('inner_tiles', 'wall_base', tx * TILE, 32);
+    }
 
-    // Kisten-Bereich im Nordosten
-    g.fillStyle(0x451a03, 0.5).fillRect(300, 44, 70, 35);
+    // Seitenwände (West & Ost)
+    for (let ty = 3; ty < HOUSE_H - 1; ty++) {
+      rt.drawFrame('inner_tiles', 'wall_side_left', 0, ty * TILE);
+      rt.drawFrame('inner_tiles', 'wall_side_right', (HOUSE_W - 1) * TILE, ty * TILE);
+    }
 
-    rt.draw(g, 0, 0);
-    g.destroy();
+    // Südwand mit Türöffnung
+    const doorCols = [11, 12, 13, 14];
+    for (let tx = 0; tx < HOUSE_W; tx++) {
+      if (doorCols.includes(tx)) continue;
+      const botF = tx === 0 ? 'wall_corner_bl' : tx === HOUSE_W - 1 ? 'wall_corner_br' : 'wall_base';
+      rt.drawFrame('inner_tiles', botF, tx * TILE, (HOUSE_H - 1) * TILE);
+    }
+
+    // 4. Wanddekorationen: Regale, Fenster, Krüge
+    rt.drawFrame('inner_tiles', 'shelf', 4 * TILE, 16);
+    rt.drawFrame('inner_tiles', 'clay_pots', 4 * TILE, 16);
+    rt.drawFrame('inner_tiles', 'window', 10 * TILE, 16);
+    rt.drawFrame('inner_tiles', 'window', 15 * TILE, 16);
+    rt.drawFrame('inner_tiles', 'shelf', 19 * TILE, 16);
+    rt.drawFrame('inner_tiles', 'clay_pots', 20 * TILE, 16);
+
+    // 5. Webteppich / Fell im Schlafbereich
+    rt.drawFrame('inner_tiles', 'rug', 3 * TILE, 4 * TILE);
 
     // Feste Kollisionszonen
-    const addWall = (x: number, y: number, w: number, h: number) => {
+    const addWallZone = (x: number, y: number, w: number, h: number) => {
       const z = this.add.zone(x, y, w, h).setOrigin(0);
       this.physics.add.existing(z, true);
       this.obstacles.add(z);
     };
 
-    addWall(0, 0, HOUSE_W * TILE, 36);
-    addWall(0, 0, 32, HOUSE_H * TILE);
-    addWall((HOUSE_W - 2) * TILE, 0, 32, HOUSE_H * TILE);
-    addWall(0, (HOUSE_H - 2) * TILE, 176, 32);
-    addWall(240, (HOUSE_H - 2) * TILE, 176, 32);
+    addWallZone(0, 0, HOUSE_W * TILE, 44); // Nordwand
+    addWallZone(0, 0, 16, HOUSE_H * TILE); // Westwand
+    addWallZone((HOUSE_W - 1) * TILE, 0, 16, HOUSE_H * TILE); // Ostwand
+    addWallZone(0, (HOUSE_H - 1) * TILE, 11 * TILE, 16); // Südwand links
+    addWallZone(15 * TILE, (HOUSE_H - 1) * TILE, 11 * TILE, 16); // Südwand rechts
   }
 
   private spawnHouseNodes(): void {
@@ -191,54 +214,67 @@ export class LonghouseScene extends Phaser.Scene {
         .setDepth(90);
     };
 
-    // 1. Schlaffelle (Volle Erholung)
-    const bedSpr = this.add.image(88, 65, 'objects', 'bubble_excl').setDepth(60);
+    // 1. Schlaffelle (Echtes Pixel-Art Bärenfellbett)
+    const bedSpr = this.add.image(76, 76, 'prop_bed').setDepth(60);
     this.nodes.push({
       kind: 'bed',
-      x: 88,
-      y: 65,
+      x: 76,
+      y: 76,
       sprite: bedSpr,
-      label: addLabel(88, 48, '🛏️ Schlaflager (Felle: 100% Schutz & Wärme)', '#fde047'),
+      label: addLabel(76, 40, '🛏️ Schlaflager', '#fde047'),
     });
 
-    // 2. Sippen-Feuerstelle in der Mitte
-    const fireSpr = this.add.image(208, 140, 'objects', 'fire0').setDepth(60);
+    // 2. Sippen-Feuerstelle & Herdfeuer
+    const fireSpr = this.add.image(180, 135, 'prop_fireplace').setDepth(60);
+    this.add.sprite(180, 134, 'objects', 'fire0').setDepth(62);
     this.nodes.push({
       kind: 'fire',
-      x: 208,
-      y: 140,
+      x: 180,
+      y: 135,
       sprite: fireSpr,
-      label: addLabel(208, 120, '🔥 Sippenfeuer (Fleisch braten)', '#fb923c'),
+      label: addLabel(180, 110, '🔥 Herdfeuer', '#fb923c'),
     });
 
-    // 3. Gemeinschaftstruhe im Nordosten
-    const chestSpr = this.add.image(330, 60, 'objects', 'pot').setDepth(60);
+    // 3. Gemeinschaftstruhe & Vorräte im Nordosten
+    const chestSpr = this.add.image(320, 65, 'prop_chest').setScale(1.2).setDepth(60);
+    this.add.image(350, 65, 'prop_sack').setDepth(58);
+    this.add.image(375, 68, 'prop_barrel').setDepth(58);
+    this.add.image(355, 95, 'prop_hay').setDepth(58);
+
     this.nodes.push({
       kind: 'chest',
-      x: 330,
-      y: 60,
+      x: 320,
+      y: 65,
       sprite: chestSpr,
-      label: addLabel(330, 42, '📦 Vorrats-Truhe der Sippe', '#a3e635'),
+      label: addLabel(320, 44, '📦 Vorratstruhe', '#a3e635'),
     });
 
-    // 4. Sippenälteste am Feuer
-    const elderSpr = this.add.image(245, 140, 'npc', 0).setDepth(60);
+    // 4. Sippentisch mit Hockern
+    const tableSpr = this.add.image(275, 140, 'prop_table').setDepth(60);
+    this.add.image(250, 140, 'inner_tiles', 'stool').setDepth(58);
+    this.add.image(300, 140, 'inner_tiles', 'stool').setDepth(58);
+    const tableZone = this.add.zone(255, 125, 42, 30).setOrigin(0);
+    this.physics.add.existing(tableZone, true);
+    this.obstacles.add(tableZone);
+
+    // 5. Sippenmutter Alva am Herdfeuer
+    const elderSpr = this.add.image(140, 135, 'npc', 0).setDepth(60);
     this.nodes.push({
       kind: 'elder',
-      x: 245,
-      y: 140,
+      x: 140,
+      y: 135,
       sprite: elderSpr,
-      label: addLabel(245, 118, '👵 Sippenmutter Alva', '#86efac'),
+      label: addLabel(140, 110, '👵 Alva', '#86efac'),
     });
 
-    // 5. Ausgangstür
+    // 6. Ausgangstür
     const exitSpr = this.add.image(208, 275, 'objects', 'bubble_excl').setVisible(false);
     this.nodes.push({
       kind: 'exit',
       x: 208,
       y: 275,
       sprite: exitSpr,
-      label: addLabel(208, 268, '🚪 Ausgang zum Dorf (Leertaste)', '#67e8f9'),
+      label: addLabel(208, 270, '🚪 Zum Dorf', '#67e8f9'),
     });
   }
 
@@ -255,7 +291,7 @@ export class LonghouseScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(px, py, n.x, n.y);
       if (dist < 32) {
         if (n.kind === 'exit') {
-          if (spaceDown || dist < 16) {
+          if (spaceDown || py > 268) {
             this.leaveHouse();
             return;
           }
@@ -276,17 +312,17 @@ export class LonghouseScene extends Phaser.Scene {
         state.add('gebraten', 1);
         state.unlock('feuer');
         state.bump('cooked');
-        state.emit('toast', 'Frisches Fleisch auf den heißen Steinen gebraten!');
+        state.emit('toast', 'Frisches Fleisch auf dem warmen Herdfeuer gebraten!');
         sfx.craft();
       } else {
-        state.emit('toast', 'Das Sippenfeuer wärmt das ganze Langhaus.');
+        state.emit('toast', 'Das Herdfeuer wärmt das ganze Langhaus.');
       }
     } else if (n.kind === 'chest') {
       state.openDialog({
         speaker: 'Vorrats-Truhe',
         nodes: [
           {
-            text: 'Hier bewahrt die Sippe geschützt vor Wind und Raubtieren Getreide, Felle und Vorräte auf.',
+            text: 'Hier bewahrt die Sippe geschützt vor Kälte und Raubtieren Getreide, Felle und Vorräte auf.',
           },
           {
             text: `Aktuell im Dorf gesichert: ${state.count('getreide')}× Getreide, ${state.count('fell')}× Tierfelle, ${state.count('stock')}× Hölzer.`,
@@ -344,7 +380,6 @@ export class LonghouseScene extends Phaser.Scene {
       this.scene.wake('World');
       const worldScene = this.scene.get('World') as any;
       if (worldScene && worldScene.player) {
-        // Vor die Langhaustür in der Oberwelt stellen
         worldScene.player.setPosition(240, 205);
         worldScene.cameras.main.fadeIn(350, 0, 0, 0);
       }

@@ -38,6 +38,75 @@ export const FARM_FRAMES: Record<string, [number, number, number, number]> = {
   sign_build: [288, 96, 16, 16],
 };
 
+/** Benannte Kachelausschnitte aus gfx/cave.png (Höhlen-Tileset). */
+export const CAVE_FRAMES: Record<string, [number, number, number, number]> = {
+  // Böden
+  floor_dark: [16, 0, 16, 16],
+  floor_smooth: [32, 0, 16, 16],
+  floor_rocky: [48, 0, 16, 16],
+  floor_pebble1: [16, 16, 16, 16],
+  floor_pebble2: [32, 16, 16, 16],
+  floor_cracked: [48, 16, 16, 16],
+
+  // Nordwand / Felswand
+  wall_tl: [64, 0, 16, 16],
+  wall_top: [80, 0, 16, 16],
+  wall_tr: [96, 0, 16, 16],
+  wall_left: [64, 16, 16, 16],
+  wall_face: [80, 16, 16, 16],
+  wall_right: [96, 16, 16, 16],
+  wall_bl: [64, 32, 16, 16],
+  wall_bottom: [80, 32, 16, 16],
+  wall_br: [96, 32, 16, 16],
+
+  // Vertikale Felswände
+  wall_face_upper: [16, 48, 16, 16],
+  wall_face_mid: [16, 64, 16, 16],
+  wall_face_lower: [16, 80, 16, 16],
+
+  // Höhlen-Wasser
+  water: [64, 144, 16, 16],
+  water_shore_n: [112, 144, 16, 16],
+  water_shore_s: [128, 144, 16, 16],
+  water_shore_w: [144, 144, 16, 16],
+  water_shore_e: [160, 144, 16, 16],
+
+  // Höhlen-Deko & Geologie
+  stalagmite: [0, 0, 16, 32],
+  stalactite: [0, 32, 16, 16],
+  ore_crystal: [112, 48, 16, 16],
+  rock_pile: [160, 64, 16, 16],
+  arch_exit: [128, 64, 32, 32],
+};
+
+/** Benannte Kachelausschnitte aus gfx/Inner.png (Innenraum-Tileset). */
+export const INNER_FRAMES: Record<string, [number, number, number, number]> = {
+  // Holzdielen- & Steinböden (glatte, warme Holzplanken)
+  wood_floor_1: [16, 64, 16, 16],
+  wood_floor_2: [32, 64, 16, 16],
+  wood_floor_3: [48, 64, 16, 16],
+  stone_floor: [16, 0, 16, 16],
+
+  // Urzeit-Holzbalken-Wände
+  wall_top: [112, 0, 16, 16],
+  wall_mid: [112, 16, 16, 16],
+  wall_base: [112, 32, 16, 16],
+  wall_corner_tl: [96, 0, 16, 16],
+  wall_corner_tr: [128, 0, 16, 16],
+  wall_side_left: [96, 16, 16, 16],
+  wall_side_right: [128, 16, 16, 16],
+  wall_corner_bl: [96, 32, 16, 16],
+  wall_corner_br: [128, 32, 16, 16],
+
+  // Deko & Einbauten
+  hearth: [0, 112, 48, 48],
+  shelf: [64, 48, 32, 16],
+  rug: [224, 0, 48, 32],
+  clay_pots: [144, 96, 16, 16],
+  window: [160, 0, 16, 16],
+  stool: [64, 144, 16, 16],
+};
+
 export class BootScene extends Phaser.Scene {
   constructor() {
     super('Boot');
@@ -59,6 +128,22 @@ export class BootScene extends Phaser.Scene {
     this.load.spritesheet('player', 'assets/gfx/character.png', { frameWidth: 16, frameHeight: 32 });
     this.load.spritesheet('npc', 'assets/gfx/NPC_test.png', { frameWidth: 16, frameHeight: 32 });
 
+    // Hochwertige Möbel & Props
+    this.load.image('prop_bed', 'assets/props/bed.png');
+    this.load.image('prop_chest', 'assets/props/chest.png');
+    this.load.image('prop_fireplace', 'assets/props/fireplace.png');
+    this.load.image('prop_table', 'assets/props/table.png');
+    this.load.image('prop_sack', 'assets/props/sack.png');
+    this.load.image('prop_barrel', 'assets/props/barrel.png');
+    this.load.image('prop_hay', 'assets/props/hay.png');
+
+    // Authentische 16-Bit-Relikt-Icons
+    this.load.image('relic_venus', 'assets/icons/relic_venus.png');
+    this.load.image('relic_loewenmensch', 'assets/icons/relic_loewenmensch.png');
+    this.load.image('relic_malerei', 'assets/icons/relic_malerei.png');
+    this.load.image('relic_oetzi', 'assets/icons/relic_oetzi.png');
+    this.load.image('relic_nebra', 'assets/icons/relic_nebra.png');
+
     for (const id of Object.keys(ITEMS)) this.load.image(`icon-${id}`, `assets/icons/${id}.png`);
   }
 
@@ -74,6 +159,10 @@ export class BootScene extends Phaser.Scene {
     for (const [name, [x, y, fw, fh]] of Object.entries(OBJECT_FRAMES)) ob.add(name, 0, x, y, fw, fh);
     const fm = this.textures.get('farm');
     for (const [name, [x, y, fw, fh]] of Object.entries(FARM_FRAMES)) fm.add(name, 0, x, y, fw, fh);
+    const cv = this.textures.get('cave_tiles');
+    for (const [name, [x, y, fw, fh]] of Object.entries(CAVE_FRAMES)) cv.add(name, 0, x, y, fw, fh);
+    const inn = this.textures.get('inner_tiles');
+    for (const [name, [x, y, fw, fh]] of Object.entries(INNER_FRAMES)) inn.add(name, 0, x, y, fw, fh);
 
     for (const id of Object.keys(ITEMS)) this.textures.get(`icon-${id}`).setFilter(Phaser.Textures.FilterMode.LINEAR);
 

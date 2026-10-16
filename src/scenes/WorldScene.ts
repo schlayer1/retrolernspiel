@@ -131,6 +131,14 @@ export class WorldScene extends Phaser.Scene {
     state.on('craft', this.onCraft, this);
     state.on('chapterChanged', this.onChapterChanged, this);
     state.on('profileChanged', this.onProfileChanged, this);
+
+    this.events.on('sleep', () => {
+      if (this.labelLayer) this.labelLayer.style.display = 'none';
+    });
+    this.events.on('wake', () => {
+      if (this.labelLayer) this.labelLayer.style.display = 'block';
+    });
+
     this.events.once('shutdown', () => {
       state.off('craft', this.onCraft, this);
       state.off('chapterChanged', this.onChapterChanged, this);
@@ -404,11 +412,13 @@ export class WorldScene extends Phaser.Scene {
       });
     }
 
-    // 8. Urzeit-Relikte in der Oberwelt
-    const oetziNode = this.addNode('relic_oetzi', 'objects', 'bubble_excl', 210, 52, true);
+    // 8. Urzeit-Relikte in der Oberwelt (echte 16-Bit-Grafiken)
+    const oetziNode = this.addNode('relic_oetzi', 'relic_oetzi', undefined, 210, 52, true);
+    oetziNode.sprite.setScale(0.35);
     oetziNode.label = this.addLabel(210, 34, '🗡️ Ötzis Kupferdolch', '#fbbf24');
 
-    const nebraNode = this.addNode('relic_himmelsscheibe', 'objects', 'bubble_excl', 540, 360, true);
+    const nebraNode = this.addNode('relic_himmelsscheibe', 'relic_nebra', undefined, 540, 360, true);
+    nebraNode.sprite.setScale(0.75);
     nebraNode.label = this.addLabel(540, 342, '✨ Himmelsscheibe von Nebra', '#38bdf8');
   }
 
@@ -1308,7 +1318,7 @@ export class WorldScene extends Phaser.Scene {
     state.bump('meat', amt);
   }
 
-  private enterCave(): void {
+  public enterCave(): void {
     state.modal = true;
     sfx.step();
     this.cameras.main.fadeOut(350, 0, 0, 0);
@@ -1319,7 +1329,7 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private enterLonghouse(): void {
+  public enterLonghouse(): void {
     state.modal = true;
     sfx.door();
     this.cameras.main.fadeOut(350, 0, 0, 0);

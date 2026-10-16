@@ -42,15 +42,15 @@ export class CaveScene extends Phaser.Scene {
     this.nodes = [];
     this.obstacles = this.physics.add.staticGroup();
 
-    // 1. Höhlen-Boden & Wände rendern
+    // 1. Höhlen-Boden, Felswände & See mit echten 16-Bit-Tiles rendern
     this.buildCaveMap();
 
     // 2. Interaktive Knoten (Erzadern, Relikte, Ausgang)
     this.spawnCaveNodes();
 
-    // 3. Spieler platzieren (Start beim südlichen Eingang)
+    // 3. Spieler platzieren (Start beim südlichen Eingang mit sicherem Abstand zum Ausgang)
     const startX = 256;
-    const startY = 300;
+    const startY = 270;
     const texKey = state.playerGender === 'female' ? 'player_female' : 'player';
     this.player = this.physics.add.sprite(startX, startY, texKey, 0);
     this.player.body!.setSize(8, 6).setOffset(4, 20);
@@ -143,66 +143,106 @@ export class CaveScene extends Phaser.Scene {
   private updateTorchLight(): void {
     this.darkOverlay.clear();
     // Dunkle Höhlenluft
-    this.darkOverlay.fill(0x08060c, 0.9);
+    this.darkOverlay.fill(0x06040a, 0.88);
 
     // Fackellichtkreis ausstanzen
     const px = this.player.x;
     const py = this.player.y;
-    const radius = 72;
+    const radius = 76;
 
     this.lightCircle.clear();
     // Mehrstufiger weicher Lichtkegel
     this.lightCircle.fillStyle(0xffffff, 1);
     this.lightCircle.fillCircle(px, py, radius);
     this.lightCircle.fillStyle(0xffffff, 0.5);
-    this.lightCircle.fillCircle(px, py, radius + 18);
-    this.lightCircle.fillStyle(0xffffff, 0.25);
-    this.lightCircle.fillCircle(px, py, radius + 32);
+    this.lightCircle.fillCircle(px, py, radius + 20);
+    this.lightCircle.fillStyle(0xffffff, 0.2);
+    this.lightCircle.fillCircle(px, py, radius + 36);
 
     // Aus Höhlenausgang scheint auch Tageslicht
-    this.lightCircle.fillStyle(0xffffff, 0.85);
-    this.lightCircle.fillCircle(256, 320, 36);
+    this.lightCircle.fillStyle(0xffffff, 0.9);
+    this.lightCircle.fillCircle(256, 320, 40);
 
     this.darkOverlay.erase(this.lightCircle, 0, 0);
   }
 
   private buildCaveMap(): void {
-    // 1. Höhlen-Boden
     const rt = this.add
       .renderTexture(0, 0, CAVE_W * TILE, CAVE_H * TILE)
       .setOrigin(0)
       .setDepth(0);
 
-    const g = this.add.graphics();
-    // Dunkler Grundstein
-    g.fillStyle(0x1a1520, 1).fillRect(0, 0, CAVE_W * TILE, CAVE_H * TILE);
-    // Gehweg-Bereich im Fels
-    g.fillStyle(0x2d2433, 1).fillRoundedRect(32, 32, (CAVE_W - 4) * TILE, (CAVE_H - 4) * TILE, 16);
-    // Unterirdischer Höhlensee
-    g.fillStyle(0x133852, 1).fillEllipse(110, 160, 90, 50);
-    g.fillStyle(0x1d5378, 0.7).fillEllipse(110, 160, 65, 35);
-    // Stalaktiten-Schattierungen
-    g.fillStyle(0x110d17, 0.85);
-    g.fillRect(0, 0, CAVE_W * TILE, 32);
-    g.fillRect(0, 0, 32, CAVE_H * TILE);
-    g.fillRect((CAVE_W - 2) * TILE, 0, 32, CAVE_H * TILE);
+    // 1. Höhlen-Boden mit echten Stein- und Schotterkacheln füllen
+    const floorFrames = ['floor_dark', 'floor_dark', 'floor_smooth', 'floor_rocky', 'floor_pebble1', 'floor_pebble2'];
+    for (let ty = 0; ty < CAVE_H; ty++) {
+      for (let tx = 0; tx < CAVE_W; tx++) {
+        const idx = (tx * 7 + ty * 13) % floorFrames.length;
+        rt.drawFrame('cave_tiles', floorFrames[idx], tx * TILE, ty * TILE);
+      }
+    }
 
-    rt.draw(g, 0, 0);
-    g.destroy();
+    // 2. Unterirdischer Felssee (Südwesten: Cols 3..11, Rows 9..14)
+    for (let ty = 9; ty <= 14; ty++) {
+      for (let tx = 3; tx <= 11; tx++) {
+        let f = 'water';
+        if (ty === 9) f = 'water_shore_n';
+        else if (ty === 14) f = 'water_shore_s';
+        else if (tx === 3) f = 'water_shore_w';
+        else if (tx === 11) f = 'water_shore_e';
+        rt.drawFrame('cave_tiles', f, tx * TILE, ty * TILE);
+      }
+    }
 
-    // 2. Fels-Kollision an den Rändern
-    const addWall = (x: number, y: number, w: number, h: number) => {
+    // 3. Felswände
+    // Nordwand (Rows 0..2)
+    for (let tx = 0; tx < CAVE_W; tx++) {
+      const topF = tx === 0 ? 'wall_tl' : tx === CAVE_W - 1 ? 'wall_tr' : 'wall_top';
+      const midF = tx === 0 ? 'wall_left' : tx === CAVE_W - 1 ? 'wall_right' : 'wall_face';
+      const botF = tx === 0 ? 'wall_bl' : tx === CAVE_W - 1 ? 'wall_br' : 'wall_bottom';
+      rt.drawFrame('cave_tiles', topF, tx * TILE, 0);
+      rt.drawFrame('cave_tiles', midF, tx * TILE, 16);
+      rt.drawFrame('cave_tiles', botF, tx * TILE, 32);
+    }
+
+    // Westwand & Ostwand (Rows 3..CAVE_H-3)
+    for (let ty = 3; ty < CAVE_H - 2; ty++) {
+      rt.drawFrame('cave_tiles', 'wall_left', 0, ty * TILE);
+      rt.drawFrame('cave_tiles', 'wall_right', (CAVE_W - 1) * TILE, ty * TILE);
+    }
+
+    // Südwand mit Höhlenausgang (Rows CAVE_H-2..CAVE_H-1)
+    const exitCols = [14, 15, 16, 17];
+    for (let tx = 0; tx < CAVE_W; tx++) {
+      if (exitCols.includes(tx)) {
+        // Ausgangsbereich: Begehbar, Tageslichteinfall
+        continue;
+      }
+      rt.drawFrame('cave_tiles', 'wall_face', tx * TILE, (CAVE_H - 2) * TILE);
+      rt.drawFrame('cave_tiles', 'wall_bottom', tx * TILE, (CAVE_H - 1) * TILE);
+    }
+
+    // Höhlenausgang-Bogen (Tageslicht)
+    rt.drawFrame('cave_tiles', 'arch_exit', 14 * TILE, (CAVE_H - 3) * TILE);
+
+    // Stalagmiten & Felsformationen
+    rt.drawFrame('cave_tiles', 'stalagmite', 32, 48);
+    rt.drawFrame('cave_tiles', 'stalagmite', (CAVE_W - 3) * TILE, 48);
+    rt.drawFrame('cave_tiles', 'rock_pile', 12 * TILE, 10 * TILE);
+    rt.drawFrame('cave_tiles', 'rock_pile', 20 * TILE, 8 * TILE);
+
+    // Kollisions-Zonen
+    const addWallZone = (x: number, y: number, w: number, h: number) => {
       const z = this.add.zone(x, y, w, h).setOrigin(0);
       this.physics.add.existing(z, true);
       this.obstacles.add(z);
     };
 
-    addWall(0, 0, CAVE_W * TILE, 36); // Nordwand
-    addWall(0, 0, 32, CAVE_H * TILE); // Westwand
-    addWall((CAVE_W - 2) * TILE, 0, 32, CAVE_H * TILE); // Ostwand
-    addWall(0, (CAVE_H - 2) * TILE, 220, 32); // Südwand links
-    addWall(292, (CAVE_H - 2) * TILE, 220, 32); // Südwand rechts
-    addWall(65, 135, 90, 50); // See-Hindernis
+    addWallZone(0, 0, CAVE_W * TILE, 44); // Nordwand
+    addWallZone(0, 0, 16, CAVE_H * TILE); // Westwand
+    addWallZone((CAVE_W - 1) * TILE, 0, 16, CAVE_H * TILE); // Ostwand
+    addWallZone(0, (CAVE_H - 2) * TILE, 14 * TILE, 32); // Südwand links
+    addWallZone(18 * TILE, (CAVE_H - 2) * TILE, 14 * TILE, 32); // Südwand rechts
+    addWallZone(4 * TILE, 10 * TILE, 7 * TILE, 4 * TILE); // Höhlensee Hindernis
   }
 
   private spawnCaveNodes(): void {
@@ -225,12 +265,12 @@ export class CaveScene extends Phaser.Scene {
       kind: 'exit',
       x: 256,
       y: 316,
-      sprite: this.add.image(256, 316, 'objects', 'bubble_excl').setVisible(false),
-      label: addLabel(256, 332, '☀️ Ausgang zur Oberwelt (Leertaste)', '#86efac'),
+      sprite: this.add.image(256, 316, 'cave_tiles', 'arch_exit').setVisible(false),
+      label: addLabel(256, 328, '☀️ Zum Dorf', '#86efac'),
     };
     this.nodes.push(exitNode);
 
-    // 2. Erzadern
+    // 2. Erzadern mit echten Erzbrocken
     // Kupferader
     const copperSpr = this.add.image(380, 70, 'ores').setDepth(60);
     this.nodes.push({
@@ -238,7 +278,7 @@ export class CaveScene extends Phaser.Scene {
       x: 380,
       y: 70,
       sprite: copperSpr,
-      label: addLabel(380, 52, '🟠 Glänzende Kupferader', '#fb923c'),
+      label: addLabel(380, 52, '🟠 Kupferader', '#fb923c'),
     });
 
     // Zinnader
@@ -248,7 +288,7 @@ export class CaveScene extends Phaser.Scene {
       x: 420,
       y: 160,
       sprite: tinSpr,
-      label: addLabel(420, 142, '⚪ Zinnader (silbrig glänzend)', '#cbd5e1'),
+      label: addLabel(420, 142, '⚪ Zinnader', '#cbd5e1'),
     });
 
     // Eisenerz
@@ -258,7 +298,7 @@ export class CaveScene extends Phaser.Scene {
       x: 350,
       y: 240,
       sprite: ironSpr,
-      label: addLabel(350, 222, '⛏️ Dunkles Eisenerz', '#94a3b8'),
+      label: addLabel(350, 222, '⛏️ Eisenerz', '#94a3b8'),
     });
 
     // Feuersteinader
@@ -268,38 +308,38 @@ export class CaveScene extends Phaser.Scene {
       x: 190,
       y: 80,
       sprite: flintSpr,
-      label: addLabel(190, 60, '🪨 Feuerstein-Knollen', '#e2e8f0'),
+      label: addLabel(190, 60, '🪨 Feuerstein', '#e2e8f0'),
     });
 
-    // 3. Relikte in der Höhle
-    // Relikt 1: Wandmalerei der Mammuts (Nordwand)
-    const malereiSpr = this.add.image(270, 50, 'objects', 'bubble_excl').setDepth(60);
+    // 3. Relikte in der Höhle mit authentischen 16-Bit-Grafiken!
+    // Relikt 1: Wandmalerei der Mammuts (Nordwand-Fels)
+    const malereiSpr = this.add.image(270, 48, 'relic_malerei').setDepth(60);
     this.nodes.push({
       kind: 'relic_malerei',
       x: 270,
-      y: 50,
+      y: 48,
       sprite: malereiSpr,
-      label: addLabel(270, 32, '🦣 Urzeitliche Wandmalerei', '#f43f5e'),
+      label: addLabel(270, 28, '🎨 Höhlenmalerei', '#f43f5e'),
     });
 
-    // Relikt 2: Venus vom Hohle Fels (am Seeufer)
-    const venusSpr = this.add.image(70, 100, 'objects', 'bubble_excl').setDepth(60);
+    // Relikt 2: Venus vom Hohle Fels (Felsnische am Seeufer)
+    const venusSpr = this.add.image(65, 95, 'relic_venus').setDepth(60);
     this.nodes.push({
       kind: 'relic_venus',
-      x: 70,
-      y: 100,
+      x: 65,
+      y: 95,
       sprite: venusSpr,
-      label: addLabel(70, 82, '🗿 Felsnische: Venus vom Hohle Fels', '#fbbf24'),
+      label: addLabel(65, 75, '🗿 Venus-Statue', '#fbbf24'),
     });
 
-    // Relikt 3: Der Löwenmensch (im Felsspalt Nordosten)
-    const loewenSpr = this.add.image(440, 65, 'objects', 'bubble_excl').setDepth(60);
+    // Relikt 3: Der Löwenmensch (erhöhter Felsspalt im Nordosten)
+    const loewenSpr = this.add.image(440, 65, 'relic_loewenmensch').setDepth(60);
     this.nodes.push({
       kind: 'relic_loewenmensch',
       x: 440,
       y: 65,
       sprite: loewenSpr,
-      label: addLabel(440, 48, '🦁 Felsspalt: Der Löwenmensch', '#eab308'),
+      label: addLabel(440, 45, '🦁 Löwenmensch', '#eab308'),
     });
   }
 
@@ -316,7 +356,7 @@ export class CaveScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(px, py, n.x, n.y);
       if (dist < 32) {
         if (n.kind === 'exit') {
-          if (spaceDown || dist < 18) {
+          if (spaceDown || py > 314) {
             this.leaveCave();
             return;
           }
@@ -393,7 +433,6 @@ export class CaveScene extends Phaser.Scene {
       this.scene.wake('World');
       const worldScene = this.scene.get('World') as any;
       if (worldScene && worldScene.player) {
-        // Spieler vor den Höhleneingang in der Oberwelt stellen
         worldScene.player.setPosition(370, 78);
         worldScene.cameras.main.fadeIn(350, 0, 0, 0);
       }
