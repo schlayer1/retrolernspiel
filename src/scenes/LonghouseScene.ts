@@ -7,11 +7,20 @@ const HOUSE_W = 26;
 const HOUSE_H = 18;
 const TILE = 16;
 
+interface DomLabel {
+  x: number;
+  y: number;
+  el: HTMLElement;
+  setText(t: string): DomLabel;
+  setY(y: number): DomLabel;
+}
+
 interface HouseNode {
   kind: 'bed' | 'fire' | 'chest' | 'elder' | 'exit';
   x: number;
   y: number;
-  label?: Phaser.GameObjects.Text;
+  hint: string;
+  label?: DomLabel;
   sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
 }
 
@@ -28,7 +37,10 @@ export class LonghouseScene extends Phaser.Scene {
   };
   private obstacles!: Phaser.Physics.Arcade.StaticGroup;
   private nodes: HouseNode[] = [];
-  private playerLabel!: Phaser.GameObjects.Text;
+  private domLabels: DomLabel[] = [];
+  private labelLayer!: HTMLElement;
+  private playerLabel?: DomLabel;
+  private promptEl!: HTMLElement;
   private exiting = false;
   private sleeping = false;
 
@@ -40,15 +52,31 @@ export class LonghouseScene extends Phaser.Scene {
     this.exiting = false;
     this.sleeping = false;
     this.nodes = [];
+    this.domLabels = [];
     this.obstacles = this.physics.add.staticGroup();
 
-    // 1. Innenraum mit echten Holzbalken, Dielen und Steinböden rendern
+    // 1. Retina-DOM-Label-Layer initialisieren
+    const existingLayer = document.getElementById('longhouse-labels');
+    this.labelLayer = existingLayer ?? document.createElement('div');
+    this.labelLayer.id = 'longhouse-labels';
+    if (!existingLayer) document.body.appendChild(this.labelLayer);
+    this.labelLayer.innerHTML = '';
+    this.labelLayer.style.display = 'block';
+
+    // Interaktions-Pille im DOM
+    this.promptEl = document.createElement('div');
+    this.promptEl.id = 'longhouse-prompt';
+    this.promptEl.style.cssText =
+      'position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:rgba(26,18,8,0.92);border:2px solid #e8c170;color:#fef08a;font-weight:900;font-size:14px;padding:6px 18px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,0.5);display:none;pointer-events:none;z-index:30;text-shadow:0 1px 2px #000;';
+    this.labelLayer.appendChild(this.promptEl);
+
+    // 2. Innenraum mit Holzkacheln, Stein-Herd und Möbeln rendern
     this.buildHouseMap();
 
-    // 2. Interaktive Knoten (Schlaffelle, Sippenfeuer, Truhe, Sippenmutter Alva, Ausgang)
+    // 3. Interaktive Knoten (Schlaffelle, Sippenfeuer, Truhe, Sippenmutter Alva, Ausgang)
     this.spawnHouseNodes();
 
-    // 3. Spieler platzieren (Start beim Eingang)
+    // 4. Spieler platzieren (Start beim Eingang)
     const startX = (HOUSE_W * TILE) / 2;
     const startY = (HOUSE_H - 2) * TILE - 8;
     const texKey = state.playerGender === 'female' ? 'player_female' : 'player';
@@ -58,25 +86,15 @@ export class LonghouseScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, HOUSE_W * TILE, HOUSE_H * TILE);
     this.physics.add.collider(this.player, this.obstacles);
 
-    this.playerLabel = this.add
-      .text(startX, startY - 22, state.playerName, {
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        fontSize: '11px',
-        color: '#fde047',
-        fontStyle: 'bold',
-        stroke: '#000000',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5)
-      .setDepth(150);
+    this.playerLabel = this.addLabel(startX, startY - 22, state.playerName, '#fde047');
 
-    // 4. Kamera einrichten
+    // 5. Kamera einrichten
     this.cameras.main.setBounds(0, 0, HOUSE_W * TILE, HOUSE_H * TILE);
     this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
     this.cameras.main.setRoundPixels(true);
     this.cameras.main.fadeIn(400, 0, 0, 0);
 
-    // 5. Steuerung
+    // 6. Steuerung
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE') as typeof this.wasd;
 
@@ -123,10 +141,60 @@ export class LonghouseScene extends Phaser.Scene {
     else if (vy > 0) this.player.anims.play(`${animPfx}walk_down`, true);
     else this.player.anims.stop();
 
-    this.playerLabel.setPosition(this.player.x, this.player.y - 22);
+    if (this.playerLabel) {
+      this.playerLabel.x = this.player.x;
+      this.playerLabel.y = this.player.y - 20;
+    }
 
-    // Interaktions-Check
+    // Interaktions-Check & gestochen scharfe Label-Synchronisation
     this.checkInteractions();
+    this.syncLabels();
+  }
+
+  private addLabel(x: number, y: number, text: string, color = '#ffe9b0'): DomLabel {
+    const el = document.createElement('div');
+    el.className = 'world-label';
+    el.style.color = color;
+    el.textContent = text;
+    this.labelLayer.appendChild(el);
+    const lbl: DomLabel = {
+      x,
+      y,
+      el,
+      setText(t: string) {
+        el.textContent = t;
+        return this;
+      },
+      setY(ny: number) {
+        lbl.y = ny;
+        return this;
+      },
+    };
+    this.domLabels.push(lbl);
+    return lbl;
+  }
+
+  private syncLabels(): void {
+    const canvas = this.game.canvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const cam = this.cameras.main;
+    const hideAll = state.modal;
+    for (const lbl of this.domLabels) {
+      if (hideAll) {
+        lbl.el.style.display = 'none';
+        continue;
+      }
+      const sx = ((lbl.x - cam.scrollX) / cam.width) * rect.width + rect.left;
+      const sy = ((lbl.y - cam.scrollY) / cam.height) * rect.height + rect.top;
+      if (sx < rect.left + 5 || sx > rect.right - 5 || sy < rect.top + 5 || sy > rect.bottom - 5) {
+        lbl.el.style.display = 'none';
+      } else {
+        lbl.el.style.display = 'block';
+        lbl.el.style.left = `${sx}px`;
+        lbl.el.style.top = `${sy}px`;
+      }
+    }
   }
 
   private buildHouseMap(): void {
@@ -135,7 +203,7 @@ export class LonghouseScene extends Phaser.Scene {
       .setOrigin(0)
       .setDepth(0);
 
-    // 1. Warmer Dielenboden aus echten Holzkacheln
+    // 1. Warmer, glatter Dielenboden aus echten Holzkacheln (py=64)
     const woodPlanks = ['wood_floor_1', 'wood_floor_2', 'wood_floor_3', 'wood_floor_1'];
     for (let ty = 0; ty < HOUSE_H; ty++) {
       for (let tx = 0; tx < HOUSE_W; tx++) {
@@ -152,7 +220,6 @@ export class LonghouseScene extends Phaser.Scene {
     }
 
     // 3. Authentische Holzbalken-Wände
-    // Nordwand (Rows 0..2)
     for (let tx = 0; tx < HOUSE_W; tx++) {
       const topF = tx === 0 ? 'wall_corner_tl' : tx === HOUSE_W - 1 ? 'wall_corner_tr' : 'wall_top';
       rt.drawFrame('inner_tiles', topF, tx * TILE, 0);
@@ -182,7 +249,7 @@ export class LonghouseScene extends Phaser.Scene {
     rt.drawFrame('inner_tiles', 'shelf', 19 * TILE, 16);
     rt.drawFrame('inner_tiles', 'clay_pots', 20 * TILE, 16);
 
-    // 5. Webteppich / Fell im Schlafbereich
+    // 5. Webteppich im Schlafbereich
     rt.drawFrame('inner_tiles', 'rug', 3 * TILE, 4 * TILE);
 
     // Feste Kollisionszonen
@@ -192,47 +259,35 @@ export class LonghouseScene extends Phaser.Scene {
       this.obstacles.add(z);
     };
 
-    addWallZone(0, 0, HOUSE_W * TILE, 44); // Nordwand
-    addWallZone(0, 0, 16, HOUSE_H * TILE); // Westwand
-    addWallZone((HOUSE_W - 1) * TILE, 0, 16, HOUSE_H * TILE); // Ostwand
-    addWallZone(0, (HOUSE_H - 1) * TILE, 11 * TILE, 16); // Südwand links
-    addWallZone(15 * TILE, (HOUSE_H - 1) * TILE, 11 * TILE, 16); // Südwand rechts
+    addWallZone(0, 0, HOUSE_W * TILE, 44);
+    addWallZone(0, 0, 16, HOUSE_H * TILE);
+    addWallZone((HOUSE_W - 1) * TILE, 0, 16, HOUSE_H * TILE);
+    addWallZone(0, (HOUSE_H - 1) * TILE, 11 * TILE, 16);
+    addWallZone(15 * TILE, (HOUSE_H - 1) * TILE, 11 * TILE, 16);
   }
 
   private spawnHouseNodes(): void {
-    const addLabel = (x: number, y: number, text: string, color = '#fef08a') => {
-      return this.add
-        .text(x, y, text, {
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-          fontSize: '11px',
-          color,
-          fontStyle: 'bold',
-          stroke: '#000000',
-          strokeThickness: 3,
-        })
-        .setOrigin(0.5)
-        .setDepth(90);
-    };
-
     // 1. Schlaffelle (Echtes Pixel-Art Bärenfellbett)
     const bedSpr = this.add.image(76, 76, 'prop_bed').setDepth(60);
     this.nodes.push({
       kind: 'bed',
       x: 76,
       y: 76,
+      hint: 'Auf Fellen schlafen (100% Wärme & Erholung)',
       sprite: bedSpr,
-      label: addLabel(76, 40, '🛏️ Schlaflager', '#fde047'),
+      label: this.addLabel(76, 40, 'Bärenfell-Lager', '#fde047'),
     });
 
     // 2. Sippen-Feuerstelle & Herdfeuer
     const fireSpr = this.add.image(180, 135, 'prop_fireplace').setDepth(60);
-    this.add.sprite(180, 134, 'objects', 'fire0').setDepth(62);
+    this.add.sprite(180, 134, 'objects', 'fire0').setDepth(62).play('fire');
     this.nodes.push({
       kind: 'fire',
       x: 180,
       y: 135,
+      hint: 'Fleisch am Herdfeuer braten',
       sprite: fireSpr,
-      label: addLabel(180, 110, '🔥 Herdfeuer', '#fb923c'),
+      label: this.addLabel(180, 110, 'Herdfeuer', '#fb923c'),
     });
 
     // 3. Gemeinschaftstruhe & Vorräte im Nordosten
@@ -245,8 +300,9 @@ export class LonghouseScene extends Phaser.Scene {
       kind: 'chest',
       x: 320,
       y: 65,
+      hint: 'Sippen-Vorratstruhe öffnen',
       sprite: chestSpr,
-      label: addLabel(320, 44, '📦 Vorratstruhe', '#a3e635'),
+      label: this.addLabel(320, 44, 'Vorratstruhe', '#a3e635'),
     });
 
     // 4. Sippentisch mit Hockern
@@ -257,14 +313,16 @@ export class LonghouseScene extends Phaser.Scene {
     this.physics.add.existing(tableZone, true);
     this.obstacles.add(tableZone);
 
-    // 5. Sippenmutter Alva am Herdfeuer
-    const elderSpr = this.add.image(140, 135, 'npc', 0).setDepth(60);
+    // 5. Sippenmutter Alva am Herdfeuer (echter 16-Bit-Charakter-Sprite aus characters.png!)
+    const elderSpr = this.add.sprite(140, 135, 'characters_all', 6).setDepth(60);
+    elderSpr.play('alva_look');
     this.nodes.push({
       kind: 'elder',
       x: 140,
       y: 135,
+      hint: 'Mit Sippenmutter Alva sprechen',
       sprite: elderSpr,
-      label: addLabel(140, 110, '👵 Alva', '#86efac'),
+      label: this.addLabel(140, 110, 'Sippenmutter Alva', '#86efac'),
     });
 
     // 6. Ausgangstür
@@ -273,8 +331,9 @@ export class LonghouseScene extends Phaser.Scene {
       kind: 'exit',
       x: 208,
       y: 275,
+      hint: 'Hinaus ins Dorf treten',
       sprite: exitSpr,
-      label: addLabel(208, 270, '🚪 Zum Dorf', '#67e8f9'),
+      label: this.addLabel(208, 270, 'Zum Dorf', '#67e8f9'),
     });
   }
 
@@ -287,18 +346,33 @@ export class LonghouseScene extends Phaser.Scene {
     const px = this.player.x;
     const py = this.player.y;
 
+    let nearestNode: HouseNode | null = null;
+    let nearestDist = 999;
+
     for (const n of this.nodes) {
       const dist = Phaser.Math.Distance.Between(px, py, n.x, n.y);
-      if (dist < 32) {
-        if (n.kind === 'exit') {
-          if (spaceDown || py > 268) {
-            this.leaveHouse();
-            return;
-          }
-        } else if (spaceDown) {
-          this.interactHouseNode(n);
+      if (dist < 32 && dist < nearestDist) {
+        nearestDist = dist;
+        nearestNode = n;
+      }
+    }
+
+    if (nearestNode && this.promptEl) {
+      this.promptEl.textContent = `[E: ${nearestNode.hint}]`;
+      this.promptEl.style.display = 'block';
+    } else if (this.promptEl) {
+      this.promptEl.style.display = 'none';
+    }
+
+    if (nearestNode) {
+      if (nearestNode.kind === 'exit') {
+        if (spaceDown || py > 268) {
+          this.leaveHouse();
           return;
         }
+      } else if (spaceDown) {
+        this.interactHouseNode(nearestNode);
+        return;
       }
     }
   }
@@ -348,15 +422,14 @@ export class LonghouseScene extends Phaser.Scene {
     if (this.sleeping) return;
     this.sleeping = true;
     sfx.eat();
+    if (this.promptEl) this.promptEl.style.display = 'none';
     this.cameras.main.fadeOut(700, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       state.dayTime = 0.05;
       state.daysSurvived++;
-      // 100% Wärme und Sicherheit im Langhaus!
       state.safety = 100;
       state.food = Math.min(100, state.food + 15);
 
-      // Gegossene Beete reifen heran
       state.plots.forEach((p: FarmPlotState) => {
         if (p.stage === 'watered') p.stage = 'ripe';
       });
@@ -374,6 +447,7 @@ export class LonghouseScene extends Phaser.Scene {
     if (this.exiting) return;
     this.exiting = true;
     sfx.step();
+    if (this.labelLayer) this.labelLayer.style.display = 'none';
     this.cameras.main.fadeOut(350, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.stop('Longhouse');

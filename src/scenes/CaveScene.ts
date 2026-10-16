@@ -6,11 +6,20 @@ const CAVE_W = 32;
 const CAVE_H = 22;
 const TILE = 16;
 
+interface DomLabel {
+  x: number;
+  y: number;
+  el: HTMLElement;
+  setText(t: string): DomLabel;
+  setY(y: number): DomLabel;
+}
+
 interface CaveNode {
   kind: 'copper' | 'tin' | 'iron' | 'flint' | 'relic_malerei' | 'relic_venus' | 'relic_loewenmensch' | 'exit';
   x: number;
   y: number;
-  label?: Phaser.GameObjects.Text;
+  hint: string;
+  label?: DomLabel;
   sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
   readyAt?: number;
 }
@@ -28,9 +37,12 @@ export class CaveScene extends Phaser.Scene {
   };
   private obstacles!: Phaser.Physics.Arcade.StaticGroup;
   private nodes: CaveNode[] = [];
+  private domLabels: DomLabel[] = [];
+  private labelLayer!: HTMLElement;
+  private promptEl!: HTMLElement;
   private darkOverlay!: Phaser.GameObjects.RenderTexture;
   private lightCircle!: Phaser.GameObjects.Graphics;
-  private playerLabel!: Phaser.GameObjects.Text;
+  private playerLabel?: DomLabel;
   private exiting = false;
 
   constructor() {
@@ -40,15 +52,31 @@ export class CaveScene extends Phaser.Scene {
   create(): void {
     this.exiting = false;
     this.nodes = [];
+    this.domLabels = [];
     this.obstacles = this.physics.add.staticGroup();
 
-    // 1. Höhlen-Boden, Felswände & See mit echten 16-Bit-Tiles rendern
+    // 1. Retina-DOM-Label-Layer initialisieren
+    const existingLayer = document.getElementById('cave-labels');
+    this.labelLayer = existingLayer ?? document.createElement('div');
+    this.labelLayer.id = 'cave-labels';
+    if (!existingLayer) document.body.appendChild(this.labelLayer);
+    this.labelLayer.innerHTML = '';
+    this.labelLayer.style.display = 'block';
+
+    // Interaktions-Pille im DOM
+    this.promptEl = document.createElement('div');
+    this.promptEl.id = 'cave-prompt';
+    this.promptEl.style.cssText =
+      'position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:rgba(26,18,8,0.92);border:2px solid #e8c170;color:#fef08a;font-weight:900;font-size:14px;padding:6px 18px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,0.5);display:none;pointer-events:none;z-index:30;text-shadow:0 1px 2px #000;';
+    this.labelLayer.appendChild(this.promptEl);
+
+    // 2. Höhlen-Boden, Felswände & See mit echten 16-Bit-Tiles rendern
     this.buildCaveMap();
 
-    // 2. Interaktive Knoten (Erzadern, Relikte, Ausgang)
+    // 3. Interaktive Knoten (Erzadern, Relikte, Ausgang)
     this.spawnCaveNodes();
 
-    // 3. Spieler platzieren (Start beim südlichen Eingang mit sicherem Abstand zum Ausgang)
+    // 4. Spieler platzieren (Start beim südlichen Eingang)
     const startX = 256;
     const startY = 270;
     const texKey = state.playerGender === 'female' ? 'player_female' : 'player';
@@ -58,25 +86,15 @@ export class CaveScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, CAVE_W * TILE, CAVE_H * TILE);
     this.physics.add.collider(this.player, this.obstacles);
 
-    this.playerLabel = this.add
-      .text(startX, startY - 22, state.playerName, {
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        fontSize: '11px',
-        color: '#fde047',
-        fontStyle: 'bold',
-        stroke: '#000000',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5)
-      .setDepth(150);
+    this.playerLabel = this.addLabel(startX, startY - 22, state.playerName, '#fde047');
 
-    // 4. Kamera einrichten
+    // 5. Kamera einrichten
     this.cameras.main.setBounds(0, 0, CAVE_W * TILE, CAVE_H * TILE);
     this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
     this.cameras.main.setRoundPixels(true);
     this.cameras.main.fadeIn(400, 0, 0, 0);
 
-    // 5. Fackellicht & Dunkelheits-Overlay
+    // 6. Fackellicht & Dunkelheits-Overlay
     this.darkOverlay = this.add
       .renderTexture(0, 0, CAVE_W * TILE, CAVE_H * TILE)
       .setOrigin(0)
@@ -84,7 +102,7 @@ export class CaveScene extends Phaser.Scene {
 
     this.lightCircle = this.add.graphics({ x: 0, y: 0 }).setVisible(false);
 
-    // 6. Steuerung
+    // 7. Steuerung
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE') as typeof this.wasd;
 
@@ -131,27 +149,74 @@ export class CaveScene extends Phaser.Scene {
     else if (vy > 0) this.player.anims.play(`${animPfx}walk_down`, true);
     else this.player.anims.stop();
 
-    this.playerLabel.setPosition(this.player.x, this.player.y - 22);
+    if (this.playerLabel) {
+      this.playerLabel.x = this.player.x;
+      this.playerLabel.y = this.player.y - 20;
+    }
 
     // Fackellicht-Overlay aktualisieren
     this.updateTorchLight();
 
-    // Interaktions-Check
+    // Interaktions-Check & gestochen scharfe DOM-Labels
     this.checkInteractions();
+    this.syncLabels();
+  }
+
+  private addLabel(x: number, y: number, text: string, color = '#ffe9b0'): DomLabel {
+    const el = document.createElement('div');
+    el.className = 'world-label';
+    el.style.color = color;
+    el.textContent = text;
+    this.labelLayer.appendChild(el);
+    const lbl: DomLabel = {
+      x,
+      y,
+      el,
+      setText(t: string) {
+        el.textContent = t;
+        return this;
+      },
+      setY(ny: number) {
+        lbl.y = ny;
+        return this;
+      },
+    };
+    this.domLabels.push(lbl);
+    return lbl;
+  }
+
+  private syncLabels(): void {
+    const canvas = this.game.canvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const cam = this.cameras.main;
+    const hideAll = state.modal;
+    for (const lbl of this.domLabels) {
+      if (hideAll) {
+        lbl.el.style.display = 'none';
+        continue;
+      }
+      const sx = ((lbl.x - cam.scrollX) / cam.width) * rect.width + rect.left;
+      const sy = ((lbl.y - cam.scrollY) / cam.height) * rect.height + rect.top;
+      if (sx < rect.left + 5 || sx > rect.right - 5 || sy < rect.top + 5 || sy > rect.bottom - 5) {
+        lbl.el.style.display = 'none';
+      } else {
+        lbl.el.style.display = 'block';
+        lbl.el.style.left = `${sx}px`;
+        lbl.el.style.top = `${sy}px`;
+      }
+    }
   }
 
   private updateTorchLight(): void {
     this.darkOverlay.clear();
-    // Dunkle Höhlenluft
     this.darkOverlay.fill(0x06040a, 0.88);
 
-    // Fackellichtkreis ausstanzen
     const px = this.player.x;
     const py = this.player.y;
     const radius = 76;
 
     this.lightCircle.clear();
-    // Mehrstufiger weicher Lichtkegel
     this.lightCircle.fillStyle(0xffffff, 1);
     this.lightCircle.fillCircle(px, py, radius);
     this.lightCircle.fillStyle(0xffffff, 0.5);
@@ -159,7 +224,6 @@ export class CaveScene extends Phaser.Scene {
     this.lightCircle.fillStyle(0xffffff, 0.2);
     this.lightCircle.fillCircle(px, py, radius + 36);
 
-    // Aus Höhlenausgang scheint auch Tageslicht
     this.lightCircle.fillStyle(0xffffff, 0.9);
     this.lightCircle.fillCircle(256, 320, 40);
 
@@ -181,7 +245,7 @@ export class CaveScene extends Phaser.Scene {
       }
     }
 
-    // 2. Unterirdischer Felssee (Südwesten: Cols 3..11, Rows 9..14)
+    // 2. Unterirdischer Felssee (Südwesten)
     for (let ty = 9; ty <= 14; ty++) {
       for (let tx = 3; tx <= 11; tx++) {
         let f = 'water';
@@ -194,7 +258,6 @@ export class CaveScene extends Phaser.Scene {
     }
 
     // 3. Felswände
-    // Nordwand (Rows 0..2)
     for (let tx = 0; tx < CAVE_W; tx++) {
       const topF = tx === 0 ? 'wall_tl' : tx === CAVE_W - 1 ? 'wall_tr' : 'wall_top';
       const midF = tx === 0 ? 'wall_left' : tx === CAVE_W - 1 ? 'wall_right' : 'wall_face';
@@ -204,142 +267,120 @@ export class CaveScene extends Phaser.Scene {
       rt.drawFrame('cave_tiles', botF, tx * TILE, 32);
     }
 
-    // Westwand & Ostwand (Rows 3..CAVE_H-3)
     for (let ty = 3; ty < CAVE_H - 2; ty++) {
       rt.drawFrame('cave_tiles', 'wall_left', 0, ty * TILE);
       rt.drawFrame('cave_tiles', 'wall_right', (CAVE_W - 1) * TILE, ty * TILE);
     }
 
-    // Südwand mit Höhlenausgang (Rows CAVE_H-2..CAVE_H-1)
     const exitCols = [14, 15, 16, 17];
     for (let tx = 0; tx < CAVE_W; tx++) {
-      if (exitCols.includes(tx)) {
-        // Ausgangsbereich: Begehbar, Tageslichteinfall
-        continue;
-      }
+      if (exitCols.includes(tx)) continue;
       rt.drawFrame('cave_tiles', 'wall_face', tx * TILE, (CAVE_H - 2) * TILE);
       rt.drawFrame('cave_tiles', 'wall_bottom', tx * TILE, (CAVE_H - 1) * TILE);
     }
 
-    // Höhlenausgang-Bogen (Tageslicht)
     rt.drawFrame('cave_tiles', 'arch_exit', 14 * TILE, (CAVE_H - 3) * TILE);
-
-    // Stalagmiten & Felsformationen
     rt.drawFrame('cave_tiles', 'stalagmite', 32, 48);
     rt.drawFrame('cave_tiles', 'stalagmite', (CAVE_W - 3) * TILE, 48);
     rt.drawFrame('cave_tiles', 'rock_pile', 12 * TILE, 10 * TILE);
     rt.drawFrame('cave_tiles', 'rock_pile', 20 * TILE, 8 * TILE);
 
-    // Kollisions-Zonen
     const addWallZone = (x: number, y: number, w: number, h: number) => {
       const z = this.add.zone(x, y, w, h).setOrigin(0);
       this.physics.add.existing(z, true);
       this.obstacles.add(z);
     };
 
-    addWallZone(0, 0, CAVE_W * TILE, 44); // Nordwand
-    addWallZone(0, 0, 16, CAVE_H * TILE); // Westwand
-    addWallZone((CAVE_W - 1) * TILE, 0, 16, CAVE_H * TILE); // Ostwand
-    addWallZone(0, (CAVE_H - 2) * TILE, 14 * TILE, 32); // Südwand links
-    addWallZone(18 * TILE, (CAVE_H - 2) * TILE, 14 * TILE, 32); // Südwand rechts
-    addWallZone(4 * TILE, 10 * TILE, 7 * TILE, 4 * TILE); // Höhlensee Hindernis
+    addWallZone(0, 0, CAVE_W * TILE, 44);
+    addWallZone(0, 0, 16, CAVE_H * TILE);
+    addWallZone((CAVE_W - 1) * TILE, 0, 16, CAVE_H * TILE);
+    addWallZone(0, (CAVE_H - 2) * TILE, 14 * TILE, 32);
+    addWallZone(18 * TILE, (CAVE_H - 2) * TILE, 14 * TILE, 32);
+    addWallZone(4 * TILE, 10 * TILE, 7 * TILE, 4 * TILE);
   }
 
   private spawnCaveNodes(): void {
-    const addLabel = (x: number, y: number, text: string, color = '#fef08a') => {
-      return this.add
-        .text(x, y, text, {
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-          fontSize: '11px',
-          color,
-          fontStyle: 'bold',
-          stroke: '#000000',
-          strokeThickness: 3,
-        })
-        .setOrigin(0.5)
-        .setDepth(90);
-    };
-
     // 1. Ausgang zur Oberwelt
     const exitNode: CaveNode = {
       kind: 'exit',
       x: 256,
       y: 316,
+      hint: 'Hinaus ans Tageslicht treten',
       sprite: this.add.image(256, 316, 'cave_tiles', 'arch_exit').setVisible(false),
-      label: addLabel(256, 328, '☀️ Zum Dorf', '#86efac'),
+      label: this.addLabel(256, 328, 'Zum Dorf', '#86efac'),
     };
     this.nodes.push(exitNode);
 
-    // 2. Erzadern mit echten Erzbrocken
-    // Kupferader
+    // 2. Erzadern
     const copperSpr = this.add.image(380, 70, 'ores').setDepth(60);
     this.nodes.push({
       kind: 'copper',
       x: 380,
       y: 70,
+      hint: 'Kupfererz abbauen (Spitzhacke)',
       sprite: copperSpr,
-      label: addLabel(380, 52, '🟠 Kupferader', '#fb923c'),
+      label: this.addLabel(380, 52, 'Kupferader', '#fb923c'),
     });
 
-    // Zinnader
     const tinSpr = this.add.image(420, 160, 'ores').setDepth(60);
     this.nodes.push({
       kind: 'tin',
       x: 420,
       y: 160,
+      hint: 'Zinnerz abbauen (Spitzhacke)',
       sprite: tinSpr,
-      label: addLabel(420, 142, '⚪ Zinnader', '#cbd5e1'),
+      label: this.addLabel(420, 142, 'Zinnader', '#cbd5e1'),
     });
 
-    // Eisenerz
     const ironSpr = this.add.image(350, 240, 'ores').setDepth(60);
     this.nodes.push({
       kind: 'iron',
       x: 350,
       y: 240,
+      hint: 'Eisenerz abbauen (Spitzhacke)',
       sprite: ironSpr,
-      label: addLabel(350, 222, '⛏️ Eisenerz', '#94a3b8'),
+      label: this.addLabel(350, 222, 'Eisenerz', '#94a3b8'),
     });
 
-    // Feuersteinader
     const flintSpr = this.add.image(190, 80, 'objects', 'bigrock').setDepth(60);
     this.nodes.push({
       kind: 'flint',
       x: 190,
       y: 80,
+      hint: 'Feuersteine aus der Wand lösen',
       sprite: flintSpr,
-      label: addLabel(190, 60, '🪨 Feuerstein', '#e2e8f0'),
+      label: this.addLabel(190, 60, 'Feuerstein', '#e2e8f0'),
     });
 
-    // 3. Relikte in der Höhle mit authentischen 16-Bit-Grafiken!
-    // Relikt 1: Wandmalerei der Mammuts (Nordwand-Fels)
+    // 3. Relikte in der Höhle
     const malereiSpr = this.add.image(270, 48, 'relic_malerei').setDepth(60);
     this.nodes.push({
       kind: 'relic_malerei',
       x: 270,
       y: 48,
+      hint: 'Urzeitliche Wandmalerei erforschen',
       sprite: malereiSpr,
-      label: addLabel(270, 28, '🎨 Höhlenmalerei', '#f43f5e'),
+      label: this.addLabel(270, 28, 'Wandmalerei', '#f43f5e'),
     });
 
-    // Relikt 2: Venus vom Hohle Fels (Felsnische am Seeufer)
     const venusSpr = this.add.image(65, 95, 'relic_venus').setDepth(60);
     this.nodes.push({
       kind: 'relic_venus',
       x: 65,
       y: 95,
+      hint: 'Venus vom Hohle Fels untersuchen',
       sprite: venusSpr,
-      label: addLabel(65, 75, '🗿 Venus-Statue', '#fbbf24'),
+      label: this.addLabel(65, 75, 'Venus-Statue', '#fbbf24'),
     });
 
-    // Relikt 3: Der Löwenmensch (erhöhter Felsspalt im Nordosten)
     const loewenSpr = this.add.image(440, 65, 'relic_loewenmensch').setDepth(60);
     this.nodes.push({
       kind: 'relic_loewenmensch',
       x: 440,
       y: 65,
+      hint: 'Löwenmensch-Relikt untersuchen',
       sprite: loewenSpr,
-      label: addLabel(440, 45, '🦁 Löwenmensch', '#eab308'),
+      label: this.addLabel(440, 45, 'Der Löwenmensch', '#eab308'),
     });
   }
 
@@ -352,18 +393,33 @@ export class CaveScene extends Phaser.Scene {
     const px = this.player.x;
     const py = this.player.y;
 
+    let nearestNode: CaveNode | null = null;
+    let nearestDist = 999;
+
     for (const n of this.nodes) {
       const dist = Phaser.Math.Distance.Between(px, py, n.x, n.y);
-      if (dist < 32) {
-        if (n.kind === 'exit') {
-          if (spaceDown || py > 314) {
-            this.leaveCave();
-            return;
-          }
-        } else if (spaceDown) {
-          this.interactCaveNode(n);
+      if (dist < 32 && dist < nearestDist) {
+        nearestDist = dist;
+        nearestNode = n;
+      }
+    }
+
+    if (nearestNode && this.promptEl) {
+      this.promptEl.textContent = `[E: ${nearestNode.hint}]`;
+      this.promptEl.style.display = 'block';
+    } else if (this.promptEl) {
+      this.promptEl.style.display = 'none';
+    }
+
+    if (nearestNode) {
+      if (nearestNode.kind === 'exit') {
+        if (spaceDown || py > 314) {
+          this.leaveCave();
           return;
         }
+      } else if (spaceDown) {
+        this.interactCaveNode(nearestNode);
+        return;
       }
     }
   }
@@ -427,6 +483,7 @@ export class CaveScene extends Phaser.Scene {
     if (this.exiting) return;
     this.exiting = true;
     sfx.step();
+    if (this.labelLayer) this.labelLayer.style.display = 'none';
     this.cameras.main.fadeOut(350, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.stop('Cave');

@@ -499,8 +499,9 @@ export class WorldScene extends Phaser.Scene {
   private placeOta(): void {
     const x = (MAP_W * TILE) / 2 + 48;
     const y = (MAP_H * TILE) / 2 - 10;
-    const sprite = this.physics.add.staticSprite(x, y, 'npc', 0);
-    sprite.setTint(0xd9d2c0).setDepth(y + 14);
+    const sprite = this.physics.add.staticSprite(x, y, 'characters_all', 6);
+    sprite.setDepth(y + 14);
+    sprite.anims.play('alva_look');
     (sprite.body as Phaser.Physics.Arcade.StaticBody).setSize(10, 8).setOffset(3, 22);
     sprite.refreshBody();
     this.obstacles.add(sprite);
