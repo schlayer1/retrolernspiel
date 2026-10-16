@@ -1,9 +1,12 @@
 import Phaser from 'phaser';
 import { sfx } from '../audio/sound';
+import { music } from '../audio/MusicManager';
 import { CHAPTERS } from '../data/chapter1';
 import { BUILDINGS, BuildingDef, BuildingId, ITEMS, ItemId, RECIPES, RecipeId } from '../data/items';
 import { CROP_MS, DAY_MS, TRAP_MS, state } from '../systems/GameState';
 import { FarmPlotState } from '../systems/SaveManager';
+import { decorSpec } from '../world/decor';
+import { WildlifeManager } from '../world/Wildlife';
 
 const TILE = 16;
 const MAP_W = 50;
@@ -51,6 +54,8 @@ interface Node {
   kind: Kind;
   sprite: Phaser.Physics.Arcade.Sprite;
   readyAt: number;
+  fullFrame?: string;
+  emptyFrame?: string;
   placed?: { x: number; y: number; t: number };
   bubble?: Phaser.GameObjects.Image;
   glow?: Phaser.GameObjects.Arc;
@@ -75,6 +80,9 @@ export class WorldScene extends Phaser.Scene {
   private sleeping = false;
   private wolfNode?: Node;
   private playerLabel?: DomLabel;
+  private wildlife!: WildlifeManager;
+  private debugGraphics?: Phaser.GameObjects.Graphics;
+  private debugEnabled = false;
 
   constructor() {
     super('World');
@@ -84,6 +92,7 @@ export class WorldScene extends Phaser.Scene {
     this.nodes = [];
     this.domLabels = [];
     this.sleeping = false;
+    this.wildlife = new WildlifeManager(this);
 
     const existingLayer = document.getElementById('world-labels');
     this.labelLayer = existingLayer ?? document.createElement('div');
@@ -94,13 +103,16 @@ export class WorldScene extends Phaser.Scene {
     const saved = state.saves.load();
     if (saved) state.loadFrom(saved);
 
-    this.buildGround();
     this.obstacles = this.physics.add.staticGroup();
+    this.buildGround();
     this.buildWater();
-    this.scatterNature();
+    this.buildMountainRidge();
     this.placeResources();
     this.placeChapter2And3Nodes();
+    this.placeAtmosphericProps();
     this.placeOta();
+    this.scatterNature();
+    this.wildlife.spawnAmbientFliers(MAP_W * TILE, MAP_H * TILE);
     state.fires.forEach((f) => this.spawnFire(f));
     state.traps.forEach((t) => this.spawnTrap(t));
 
@@ -121,11 +133,22 @@ export class WorldScene extends Phaser.Scene {
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE') as typeof this.wasd;
 
+    // Debug-Hitbox-Ansicht (?debug=1 oder F3)
+    const params = new URLSearchParams(location.search);
+    this.debugEnabled = params.has('debug');
+    this.debugGraphics = this.add.graphics().setDepth(9500);
+    this.input.keyboard!.on('keydown-F3', () => {
+      this.debugEnabled = !this.debugEnabled;
+      if (!this.debugEnabled) this.debugGraphics?.clear();
+    });
+
     this.nightOverlay = this.add
       .rectangle(0, 0, this.scale.width, this.scale.height, 0x0b1240, 0)
       .setOrigin(0)
       .setScrollFactor(0)
       .setDepth(8000);
+
+    music.playChapterMusic(state.chapter);
 
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
     state.on('craft', this.onCraft, this);
@@ -159,6 +182,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private onChapterChanged(): void {
+    music.playChapterMusic(state.chapter);
     this.persist();
     this.scene.restart();
   }
@@ -188,78 +212,466 @@ export class WorldScene extends Phaser.Scene {
     n.glow?.destroy();
     n.cropSprite?.destroy();
     if (n.sprite) {
+      this.wildlife.removeBySprite(n.sprite);
       this.obstacles.remove(n.sprite, true, true);
     }
     this.nodes = this.nodes.filter((x) => x !== n);
   }
 
+  // ---------------------------------------------------------------- Atlas-Helfer & Kollisionsboxen
+
+  /**
+   * Platziert ein Sprite aus dem `world`-Atlas mit maßgeschneiderter Skalierung
+   * und exakter Fuß-Kollisionsbox aus `src/world/decor.ts`.
+   */
+  private placeDecor(
+    frame: string,
+    x: number,
+    y: number,
+    opts?: { collidable?: boolean; scale?: number; depthOffset?: number },
+  ): Phaser.Physics.Arcade.Sprite {
+    const texFrame = this.textures.getFrame('world', frame);
+    const fw = texFrame ? texFrame.realWidth : 32;
+    const fh = texFrame ? texFrame.realHeight : 32;
+    const spec = decorSpec(frame, fw, fh);
+    const scale = opts?.scale ?? spec.scale;
+    const wantBody = opts?.collidable ?? spec.hb !== null;
+
+    const s = (
+      wantBody ? this.obstacles.create(x, y, 'world', frame) : this.physics.add.staticSprite(x, y, 'world', frame)
+    ) as Phaser.Physics.Arcade.Sprite;
+
+    s.setScale(scale);
+    const dispW = fw * scale;
+    const dispH = fh * scale;
+    s.setDepth(y + dispH / 2 + (opts?.depthOffset ?? 0));
+
+    const b = s.body as Phaser.Physics.Arcade.StaticBody | null;
+    if (b) {
+      if (wantBody && spec.hb) {
+        // Phaser StaticBody nach refreshBody() in Weltkoordinaten positionieren:
+        s.refreshBody();
+        const bw = Math.max(6, spec.hb.w);
+        const bh = Math.max(4, spec.hb.h);
+        const footY = y + dispH / 2;
+        b.setSize(bw, bh, false);
+        b.setOffset((dispW - bw) / 2, dispH - bh - spec.hb.by);
+        b.position.set(x - bw / 2, footY - spec.hb.by - bh);
+      } else if (wantBody) {
+        s.refreshBody();
+        const bw = Math.max(8, Math.round(dispW * 0.65));
+        const bh = Math.max(6, Math.round(dispH * 0.32));
+        const footY = y + dispH / 2;
+        b.setSize(bw, bh, false);
+        b.setOffset((dispW - bw) / 2, dispH - bh - 2);
+        b.position.set(x - bw / 2, footY - 2 - bh);
+      } else {
+        b.enable = false;
+      }
+    }
+    return s;
+  }
+
+  private setFootBox(s: Phaser.Physics.Arcade.Sprite, bw: number, bh: number, by = 2): void {
+    const dispW = s.displayWidth;
+    const dispH = s.displayHeight;
+    const footY = s.y + dispH / 2;
+    const b = s.body as Phaser.Physics.Arcade.StaticBody;
+    s.refreshBody();
+    b.setSize(bw, bh, false);
+    b.setOffset((dispW - bw) / 2, dispH - bh - by);
+    b.position.set(s.x - bw / 2, footY - by - bh);
+  }
+
   // ---------------------------------------------------------------- Aufbau der Welt
 
-  private buildGround(): void {
-    const rt = this.add.renderTexture(0, 0, MAP_W * TILE, MAP_H * TILE).setOrigin(0).setDepth(0);
-    for (let y = 0; y < MAP_H; y++) {
-      for (let x = 0; x < MAP_W; x++) rt.drawFrame('overworld', 'grass', x * TILE, y * TILE);
+  /** Liefert den kürzesten Abstand (in Pixeln) zum nächsten Dorfpfad (< 0 = mitten auf dem Weg). */
+  private pathDistance(px: number, py: number): number {
+    let minD = 999;
+    // 1. Dorfplatz-Zentrum rund um Ota & Lagerfeuer
+    minD = Math.min(minD, Phaser.Math.Distance.Between(px, py, 405, 312) - 36);
+    // 2. Nordpfad: Dorfplatz -> Höhle / Bergbau-Stollen (370, 62..312)
+    if (py >= 58 && py <= 316) {
+      const roadX = 382 + Math.sin(py / 45) * 10;
+      minD = Math.min(minD, Math.abs(px - roadX) - 13);
     }
-    const rng = new Phaser.Math.RandomDataGenerator(['blumen']);
-    for (let i = 0; i < 55; i++) {
-      rt.drawFrame('overworld', 'flowers', rng.between(0, MAP_W - 1) * TILE, rng.between(0, MAP_H - 1) * TILE);
+    // 3. Ostpfad: Dorfplatz -> Ackerfeld & Seeufer (400..615)
+    if (px >= 396 && px <= 618) {
+      const roadY = 286 - (px - 400) * 0.14;
+      minD = Math.min(minD, Math.abs(py - roadY) - 12);
+    }
+    // 4. Südostpfad: Dorfplatz -> Tiergehege & Ziegenweide (408..615)
+    if (px >= 406 && px <= 615) {
+      const roadY = 322 + (px - 410) * 0.16;
+      minD = Math.min(minD, Math.abs(py - roadY) - 12);
+    }
+    // 5. Westpfad: Dorfplatz -> Werkstätten (255..405)
+    if (px >= 252 && px <= 408) {
+      const roadY = 304 - (405 - px) * 0.24;
+      minD = Math.min(minD, Math.abs(py - roadY) - 12);
+    }
+    // 6. Südpfad: Dorfplatz -> Fernhändler Enki (x ~ 400, y: 312..490)
+    if (py >= 310 && py <= 492) {
+      const roadX = 400 + Math.sin(py / 40) * 8;
+      minD = Math.min(minD, Math.abs(px - roadX) - 13);
+    }
+    // 7. Abzweig zum Sonnenberg / Himmelsscheibe (Kapitel 4+)
+    if (state.chapter >= 4 && px >= 398 && px <= 575) {
+      const roadY = 472 + Math.sin(px / 35) * 6;
+      minD = Math.min(minD, Math.abs(py - roadY) - 11);
+    }
+    return minD;
+  }
+
+  private isOnPath(px: number, py: number): boolean {
+    return this.pathDistance(px, py) <= 4;
+  }
+
+  private buildGround(): void {
+    const mapW = MAP_W * TILE;
+    const mapH = MAP_H * TILE;
+    const texKey = `baked_ground_ch${state.chapter}`;
+
+    if (!this.textures.exists(texKey)) {
+      const srcImg = this.textures.get('ground_a2').getSourceImage() as HTMLImageElement;
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width = srcImg.width;
+      srcCanvas.height = srcImg.height;
+      const sctx = srcCanvas.getContext('2d')!;
+      sctx.drawImage(srcImg, 0, 0);
+      const srcData = sctx.getImageData(0, 0, srcImg.width, srcImg.height).data;
+      const sw = srcImg.width;
+
+      // In RPG Maker MV A2 (768x576, 8x4 Blöcke à 96x144) liegt die 100% nahtlose
+      // 48x48-Innenkachel jedes Blocks exakt bei (bx*96 + 24, by*144 + 72).
+      const sampleBlock = (bx: number, by: number, x: number, y: number): [number, number, number] => {
+        const u = ((x % 48) + 48) % 48;
+        const v = ((y % 48) + 48) % 48;
+        const sx = bx * 96 + 24 + u;
+        const sy = by * 144 + 72 + v;
+        const idx = (sy * sw + sx) * 4;
+        return [srcData[idx], srcData[idx + 1], srcData[idx + 2]];
+      };
+
+      // 4x4 Bayer-Dither-Matrix für authentische 16-Bit-Pixel-Übergänge ohne harte Kanten
+      const bayer4 = [
+        [0 / 16, 8 / 16, 2 / 16, 10 / 16],
+        [12 / 16, 4 / 16, 14 / 16, 6 / 16],
+        [3 / 16, 11 / 16, 1 / 16, 9 / 16],
+        [15 / 16, 7 / 16, 13 / 16, 5 / 16],
+      ];
+
+      const canvasTex = this.textures.createCanvas(texKey, mapW, mapH)!;
+      const ctx = canvasTex.getContext();
+      const out = ctx.createImageData(mapW, mapH);
+      const dst = out.data;
+
+      const lx0 = LAKE.x * TILE;
+      const ly0 = LAKE.y * TILE;
+      const lx1 = (LAKE.x + LAKE.w) * TILE;
+      const ly1 = (LAKE.y + LAKE.h) * TILE;
+
+      // Wir rendern in 2x2-Pixel-Clustern für knackige 16-Bit-Pixel-Art-Optik
+      for (let y = 0; y < mapH; y += 2) {
+        for (let x = 0; x < mapW; x += 2) {
+          const dither = bayer4[(y >> 1) & 3][(x >> 1) & 3] - 0.5;
+
+          // 1. Wiesengrün (1,1) vs. tieferes Waldgrün (0,1) an den Waldrändern
+          const wave = Math.sin(x * 0.022 + y * 0.018) * 0.5 + Math.cos(x * 0.015 - y * 0.025) * 0.5;
+          const edgeBoost =
+            (x < 175 ? (175 - x) / 90 : 0) +
+            (y < 105 ? (105 - y) / 70 : 0) +
+            (x > 670 ? (x - 670) / 90 : 0) +
+            (y > 515 ? (y - 515) / 70 : 0);
+          let bx = wave + edgeBoost + dither * 0.55 > 0.38 ? 0 : 1;
+          let by = 1;
+
+          // 2. Sandiger Ufersaum rund um den See
+          const dxLake = x < lx0 ? lx0 - x : x > lx1 ? x - lx1 : 0;
+          const dyLake = y < ly0 ? ly0 - y : y > ly1 ? y - ly1 : 0;
+          const distLake = Math.hypot(dxLake, dyLake);
+          if (distLake < 22 + dither * 8) {
+            bx = 2;
+            by = 1;
+          }
+
+          // 3. Organische Dorfpfade & Dorfplatz
+          const pDist = this.pathDistance(x, y);
+          if (pDist < dither * 7) {
+            const distPlaza = Phaser.Math.Distance.Between(x, y, 405, 312);
+            if (state.chapter >= 5 && distPlaza < 34 + dither * 8) {
+              bx = 6; // Natursteinpflaster auf dem Dorfplatz ab Kapitel 5
+              by = 1;
+            } else {
+              bx = 1; // Warmer Lehm-/Erdpfad
+              by = 0;
+            }
+          }
+
+          // Für jedes Pixel im 2x2-Block die nahtlose 48x48-Textur abtasten
+          for (let py = y; py < y + 2 && py < mapH; py++) {
+            for (let px = x; px < x + 2 && px < mapW; px++) {
+              const [r, g, b] = sampleBlock(bx, by, px, py);
+              const oi = (py * mapW + px) * 4;
+              dst[oi] = r;
+              dst[oi + 1] = g;
+              dst[oi + 2] = b;
+              dst[oi + 3] = 255;
+            }
+          }
+        }
+      }
+      ctx.putImageData(out, 0, 0);
+      canvasTex.refresh();
+    }
+
+    this.add.image(0, 0, texKey).setOrigin(0).setDepth(0);
+
+    // 2. Reiche, kollisionsfreie Bodendekorationen (Grasbüschel, kleine Blumen, Farne, Kiesel, Pilze)
+    // WICHTIG: Nur echte Frame-Namen aus world_atlas.json verwenden!
+    const groundFlora = [
+      'grass_s1',
+      'grass_s2',
+      'grass_s3',
+      'grass_s4',
+      'grass_1',
+      'grass_2',
+      'fern_1',
+      'fern_2',
+      'fern_3',
+      'fern_4',
+      'flower_bunch_a',
+      'flower_bunch_b',
+      'flower_bunch_c',
+      'flower_purple',
+      'flower_white',
+      'flower_pink',
+      'flower_blue_a',
+      'flower_tulip_y',
+      'pebbles_a',
+      'pebbles_b',
+      'pebbles_c',
+      'rock_small_a',
+      'rock_small_b',
+      'mushroom_small',
+      'mushroom_b',
+      'mushroom_red',
+    ];
+    const rng = new Phaser.Math.RandomDataGenerator(['boden-detail-v4']);
+    for (let i = 0; i < 110; i++) {
+      const x = rng.between(24, mapW - 24);
+      const y = rng.between(78, mapH - 20);
+      if (this.inLake(x, y)) continue;
+      const onPath = this.isOnPath(x, y);
+      const frame = onPath
+        ? rng.pick(['pebbles_a', 'pebbles_b', 'pebbles_c', 'rock_small_a'])
+        : rng.pick(groundFlora);
+      const spec = decorSpec(frame, 24, 24);
+      this.add.image(x, y, 'world', frame).setScale(spec.scale).setDepth(1.2);
     }
   }
 
   private buildWater(): void {
-    const rt = this.add.renderTexture(LAKE.x * TILE, LAKE.y * TILE, LAKE.w * TILE, LAKE.h * TILE).setOrigin(0).setDepth(1);
+    const lx = LAKE.x * TILE;
+    const ly = LAKE.y * TILE;
+    const lw = LAKE.w * TILE;
+    const lh = LAKE.h * TILE;
+
+    const rt = this.add.renderTexture(lx, ly, lw, lh).setOrigin(0).setDepth(1);
     for (let ty = 0; ty < LAKE.h; ty++) {
       for (let tx = 0; tx < LAKE.w; tx++) rt.drawFrame('overworld', 'water', tx * TILE, ty * TILE);
     }
-    const zone = this.add.zone(LAKE.x * TILE, LAKE.y * TILE, LAKE.w * TILE, LAKE.h * TILE).setOrigin(0);
+    const zone = this.add.zone(lx + 4, ly + 4, lw - 8, lh - 8).setOrigin(0);
     this.physics.add.existing(zone, true);
     this.obstacles.add(zone);
+
+    // Natürliche Ufergestaltung: Felsen, Schilf/Farne und kleiner Holzsteg am Südufer
+    this.add.image(lx + 56, ly + lh - 2, 'world', 'bridge_h').setScale(0.45).setDepth(2);
+
+    const shoreRocks: Array<[string, number, number]> = [
+      ['rock_moss_a', lx - 6, ly + 18],
+      ['rock_moss_f', lx + 14, ly - 4],
+      ['rock_moss_b', lx + lw - 12, ly + 10],
+      ['rock_moss_g', lx + lw + 4, ly + lh - 18],
+      ['rock_small_c', lx + 6, ly + lh + 4],
+      ['rock_small_d', lx + lw - 28, ly + lh + 6],
+    ];
+    shoreRocks.forEach(([fr, rx, ry]) => {
+      this.placeDecor(fr, rx, ry, { collidable: false, scale: 0.55 });
+    });
+
+    const shoreReeds: Array<[string, number, number]> = [
+      ['fern_1', lx - 8, ly + 48],
+      ['grass_1', lx - 6, ly + 88],
+      ['fern_2', lx - 4, ly + 124],
+      ['grass_2', lx + 30, ly + lh + 4],
+      ['fern_3', lx + 150, ly + lh + 4],
+      ['grass_3', lx + lw + 6, ly + 52],
+      ['fern_4', lx + lw + 4, ly + 96],
+    ];
+    shoreReeds.forEach(([fr, rx, ry]) => {
+      this.add.image(rx, ry, 'world', fr).setScale(0.52).setDepth(ry);
+    });
+  }
+
+  /**
+   * Baut das nördliche Gebirgsmassiv mit authentischem Höhlenportal (`cave_mouth`),
+   * Fackeln und eingebetteten Erzadern – bei garantiert freiem Zugangskorridor zu allen Zielen.
+   */
+  private buildMountainRidge(): void {
+    // Westlicher und nördlicher Felsriegel (y = 20..52), spart Ötzi (210,52) und den Höhlenvorplatz (340..400) frei
+    const cliffRocks: Array<[string, number, number, boolean]> = [
+      ['rock_moss_d', 36, 32, true],
+      ['rock_big_a', 82, 30, true],
+      ['rock_moss_e', 132, 32, true],
+      ['rock_big_b', 172, 28, true],
+      // Lücke um (210, 52) für Ötzis Kupferdolch
+      ['rock_moss_c', 248, 28, true],
+      ['rock_big_c', 286, 26, true],
+      ['rock_tall_a', 322, 34, true],
+      // Höhlenportal sitzt bei (370, 44)
+      ['rock_tall_b', 418, 34, true],
+      ['rock_big_a', 454, 28, true],
+      ['rock_moss_d', 492, 32, true],
+    ];
+    cliffRocks.forEach(([fr, x, y, col]) => {
+      this.placeDecor(fr, x, y, { collidable: col, scale: 0.65 });
+    });
+
+    // Flankierende Gebirgskiefern entlang des Nordkamm-Rands (echte Frame-Namen!)
+    const ridgePines: Array<[string, number, number]> = [
+      ['tree_pine_2', 58, 56],
+      ['tree_pine_1', 150, 54],
+      ['tree_pine_3', 258, 48],
+      ['tree_pine_2', 502, 52],
+    ];
+    ridgePines.forEach(([fr, x, y]) => {
+      this.placeDecor(fr, x, y, { scale: 0.65 });
+    });
+
+    // Fackeln links und rechts des Höhleneingangs + kleine Knochen-Warnmarkierung
+    this.placeDecor('torch', 334, 62, { collidable: false, scale: 0.65 });
+    this.placeDecor('torch', 406, 62, { collidable: false, scale: 0.65 });
+    this.add.image(326, 74, 'world', 'skulls_pair').setScale(0.52).setDepth(74);
   }
 
   private inLake(x: number, y: number): boolean {
     return (
-      x > (LAKE.x - 1) * TILE &&
-      x < (LAKE.x + LAKE.w + 1) * TILE &&
-      y > (LAKE.y - 1) * TILE &&
-      y < (LAKE.y + LAKE.h + 1) * TILE
+      x > (LAKE.x - 2) * TILE &&
+      x < (LAKE.x + LAKE.w + 2) * TILE &&
+      y > (LAKE.y - 2) * TILE &&
+      y < (LAKE.y + LAKE.h + 2) * TILE
     );
   }
 
   private inVillageClearance(x: number, y: number): boolean {
+    // 1. Hauptpfade inkl. Randstreifen immer komplett freihalten
+    if (this.pathDistance(x, y) < 18) return true;
+    // 2. Dorfzentrum rund um Spieler-Start & Ota
     const cx = (MAP_W * TILE) / 2;
     const cy = (MAP_H * TILE) / 2;
-    if (Phaser.Math.Distance.Between(x, y, cx, cy) < 165) return true;
-    // Acker- und Gehegebereich im Osten/Südosten freihalten
-    if (x > 460 && x < 650 && y > 180 && y < 410) return true;
-    // Westliche Werkstätten (Webstuhl, Schmelzofen, Schmiede) freihalten
-    if (x > 210 && x < 360 && y > 140 && y < 410) return true;
-    // Nord-Stollen & Erzfeld freihalten
-    if (x > 250 && x < 490 && y < 130) return true;
-    // Südlicher Handelsplatz freihalten
-    if (x > 330 && x < 470 && y > 430 && y < 530) return true;
+    if (Phaser.Math.Distance.Between(x, y, cx, cy) < 140) return true;
+    // 3. Alle Bauplätze (auch für spätere Kapitel!) großzügig freihalten
+    for (const b of BUILDINGS) {
+      if (Phaser.Math.Distance.Between(x, y, b.x, b.y) < 58) return true;
+    }
+    // 4. Acker-, Wasserstellen-, Gehege- und Ziegenweide-Bereich im Osten/Südosten
+    if (x > 445 && x < 720 && y > 165 && y < 440) return true;
+    // 5. Westliche Werkstätten (Webstuhl, Töpferofen, Schmelzofen, Schmiede, Wolf)
+    if (x > 210 && x < 370 && y > 140 && y < 405) return true;
+    // 6. Nord-Stollen, Erzadern & Ötzi-Fundplatz
+    if (x > 175 && x < 508 && y < 130) return true;
+    // 7. Südlicher Handelsplatz (Enki) & Sonnenberg-Steinkreis (Nebra)
+    if (x > 330 && x < 640 && y > 425 && y < 540) return true;
+    // 8. Sicherheitsabstand zu allen aktiven Interaktionsknoten
+    for (const n of this.nodes) {
+      if (Phaser.Math.Distance.Between(x, y, n.sprite.x, n.sprite.y) < 46) return true;
+    }
     return false;
   }
 
   private scatterNature(): void {
-    const rng = new Phaser.Math.RandomDataGenerator(['steinzeit']);
-    for (let i = 0; i < 55; i++) {
-      const x = rng.between(16, MAP_W * TILE - 16);
-      const y = rng.between(24, MAP_H * TILE - 8);
+    // Handplatzierte, dichte Waldränder & Baumgruppen mit verifizierten Frame-Namen aus world_atlas.json
+    const curatedTrees: Array<[string, number, number]> = [
+      // Nordwestlicher Urwald
+      ['tree_pine_tall', 42, 98],
+      ['tree_oak_1', 95, 92],
+      ['tree_pine_1', 142, 108],
+      ['tree_oak_2', 55, 152],
+      ['tree_fir_1', 112, 165],
+      ['tree_pine_2', 48, 215],
+      ['tree_oak_3', 96, 240],
+      // Westlicher Waldrand
+      ['tree_pine_3', 46, 305],
+      ['tree_autumn_1', 88, 345],
+      ['tree_dead', 52, 405],
+      ['tree_oak_1', 92, 445],
+      ['tree_pine_4', 58, 515],
+      ['tree_fir_2', 118, 548],
+      // Südlicher Waldsaum
+      ['tree_oak_2', 205, 562],
+      ['tree_pine_5', 278, 568],
+      ['tree_willow', 485, 562],
+      ['tree_oak_3', 655, 552],
+      ['tree_pine_1', 735, 538],
+      // Östlicher Obsthain & Uferwald
+      ['tree_apple', 752, 245],
+      ['tree_pear', 758, 305],
+      ['tree_autumn_2', 752, 375],
+      ['tree_oak_1', 744, 455],
+    ];
+    curatedTrees.forEach(([fr, x, y]) => {
+      if (!this.inLake(x, y) && !this.inVillageClearance(x, y)) this.placeDecor(fr, x, y);
+    });
+
+    // Zusätzliche prozedurale Büsche, Felsen und Bäume in den freien Naturzonen
+    const rng = new Phaser.Math.RandomDataGenerator(['steinzeit-v4']);
+    const scatterPool = [
+      'bush_a',
+      'bush_b',
+      'bush_flower_a',
+      'bush_big_green',
+      'bush_big_leaf',
+      'bush_tall_a',
+      'rock_moss_a',
+      'rock_moss_b',
+      'rock_moss_f',
+      'rock_moss_g',
+      'tree_oak_1',
+      'tree_oak_2',
+      'tree_pine_1',
+      'tree_pine_2',
+      'tree_fir_1',
+      'tree_small_1',
+      'tree_small_2',
+    ];
+    for (let i = 0; i < 46; i++) {
+      const x = rng.between(28, MAP_W * TILE - 28);
+      const y = rng.between(78, MAP_H * TILE - 22);
       if (this.inVillageClearance(x, y) || this.inLake(x, y)) continue;
-      const kind = rng.pick(['rocks', 'bush', 'bush']);
-      this.makeObstacle(x, y, 'overworld', kind);
+      const frame = rng.pick(scatterPool);
+      this.placeDecor(frame, x, y);
     }
   }
 
   private makeObstacle(x: number, y: number, tex: string, frame?: string, collidable = true): Phaser.Physics.Arcade.Sprite {
+    if (tex === 'world' && frame) {
+      return this.placeDecor(frame, x, y, { collidable });
+    }
     const o = (
       collidable ? this.obstacles.create(x, y, tex, frame) : this.physics.add.staticSprite(x, y, tex, frame)
     ) as Phaser.Physics.Arcade.Sprite;
-    o.setDepth(y + o.height / 2);
-    const b = o.body as Phaser.Physics.Arcade.StaticBody;
-    b.setSize(o.width * 0.7, o.height * 0.45);
-    b.setOffset(o.width * 0.15, o.height * 0.55);
-    o.refreshBody();
+    o.setDepth(y + o.displayHeight / 2);
+    if (collidable) {
+      this.setFootBox(
+        o,
+        Math.max(8, Math.round(o.displayWidth * 0.68)),
+        Math.max(6, Math.round(o.displayHeight * 0.36)),
+        2,
+      );
+    } else if (o.body) {
+      (o.body as Phaser.Physics.Arcade.StaticBody).enable = false;
+    }
     return o;
   }
 
@@ -298,48 +710,63 @@ export class WorldScene extends Phaser.Scene {
     return lbl;
   }
 
-  /** Sammelstellen für alle Kapitel. */
+  /** Sammelstellen für alle Kapitel (echte Beerensträucher, Baumstümpfe & Felsen aus dem `world`-Atlas). */
   private placeResources(): void {
-    const berries: Array<[number, number]> = [
-      [270, 240],
-      [480, 275],
-      [215, 330],
-      [605, 340],
-      [290, 450],
-      [475, 465],
-      [180, 215],
+    const berries: Array<[number, number, string]> = [
+      [270, 240, 'bush_berry_red'],
+      [480, 275, 'bush_berry_blue'],
+      [215, 330, 'bush_berry_red'],
+      [605, 340, 'bush_berry_red'],
+      [290, 450, 'bush_berry_blue'],
+      [475, 465, 'bush_berry_red'],
+      [180, 215, 'bush_berry_blue'],
     ];
-    const stumps: Array<[number, number]> = [
-      [375, 395],
-      [210, 275],
-      [635, 420],
-      [340, 155],
-      [130, 380],
-      [555, 505],
+    const stumps: Array<[number, number, string]> = [
+      [375, 395, 'stump_a'],
+      [210, 275, 'stump_b'],
+      [635, 420, 'logs_a'],
+      [340, 155, 'stump_a'],
+      [130, 380, 'stump_b'],
+      [555, 505, 'logs_a'],
     ];
-    const rocks: Array<[number, number]> = [
-      [245, 195],
-      [560, 445],
-      [160, 470],
-      [655, 290],
-      [485, 115],
-      [320, 520],
+    const rocks: Array<[number, number, string]> = [
+      [245, 195, 'rock_moss_a'],
+      [560, 445, 'rock_big_a'],
+      [160, 470, 'rock_moss_b'],
+      [655, 290, 'rock_big_b'],
+      [485, 115, 'rock_moss_c'],
+      [320, 520, 'rock_big_c'],
     ];
-    berries.forEach(([x, y]) => this.addNode('berry', 'objects', 'berrybush', x, y).sprite.setTint(0xff9a9a));
-    stumps.forEach(([x, y]) => this.addNode('stump', 'objects', 'stump', x, y));
-    rocks.forEach(([x, y]) => this.addNode('rock', 'objects', 'bigrock', x, y));
+    berries.forEach(([x, y, fr]) => {
+      const n = this.addNode('berry', 'world', fr, x, y, true);
+      n.fullFrame = fr;
+      n.emptyFrame = 'bush_a';
+    });
+    stumps.forEach(([x, y, fr]) => this.addNode('stump', 'world', fr, x, y, true));
+    rocks.forEach(([x, y, fr]) => this.addNode('rock', 'world', fr, x, y, true));
   }
 
   /** Zusätzliche Elemente für Kapitel 2 bis 6 (Wolf, Acker, Dorf-Bauplätze, Händler Enki, Bergbau-Stollen & Erzadern). */
   private placeChapter2And3Nodes(): void {
-    // 1. Scheuer Wolf / gezähmter Hütehund
+    // 1. Scheuer Wolf / gezähmter Hütehund (wandert vor der Zähmung frei auf seiner Waldlichtung)
     if (state.chapter >= 2 || state.wolfTamed) {
-      const wx = state.wolfTamed ? (MAP_W * TILE) / 2 + 24 : 295;
-      const wy = state.wolfTamed ? (MAP_H * TILE) / 2 + 12 : 295;
+      const wx = state.wolfTamed ? (MAP_W * TILE) / 2 + 44 : 295;
+      const wy = state.wolfTamed ? (MAP_H * TILE) / 2 + 18 : 295;
       const wNode = this.addNode('wolf', 'wolf', undefined, wx, wy, false);
       wNode.sprite.setScale(1.3);
       wNode.label = this.addLabel(wx, wy - 14, state.wolfTamed ? 'Hund Lupo' : 'Scheuer Wolf', '#ffffff');
       this.wolfNode = wNode;
+
+      if (!state.wolfTamed) {
+        this.wildlife.addAnimal({
+          kind: 'wolf',
+          sprite: wNode.sprite,
+          bounds: { minX: 272, maxX: 318, minY: 278, maxY: 316 },
+          speed: 16,
+          labelOffsetY: -14,
+          syncLabel: (nx, ny) => wNode.label?.setPosition(nx, ny),
+        });
+      }
     }
 
     // 2. Wildkorn-Ähren südlich vom See (liefern Wildkorn-Samen)
@@ -365,8 +792,8 @@ export class WorldScene extends Phaser.Scene {
       clays.forEach(([x, y]) => this.addNode('clay', 'clay_pile', undefined, x, y, false));
       this.addLabel(555, 206, 'Lehm');
 
-      const waterSpot = this.addNode('water_spot', 'objects', 'pot', 625, 212, false);
-      waterSpot.sprite.setTint(0x7ec8ff);
+      const waterSpot = this.addNode('water_spot', 'prop_water_trough', undefined, 625, 212, true);
+      this.setFootBox(waterSpot.sprite, 32, 10, 2);
       this.addLabel(625, 198, 'Wasserstelle', '#9ee0ff');
 
       // 4. 6 Acker-Parzellen (2x3 Raster) südlich vom See
@@ -384,7 +811,7 @@ export class WorldScene extends Phaser.Scene {
       this.addLabel(519, 232, 'Ackerfeld');
     }
 
-    // 5. Kapitel 3–6: Dorf-Bauplätze, fertige Gebäude und Wildziegen
+    // 5. Kapitel 3–6: Dorf-Bauplätze, fertige Gebäude und frei ziehende Wildziegen-Herde
     if (state.chapter >= 3 || state.buildings.length > 0) {
       BUILDINGS.forEach((b) => {
         const built = state.hasBuilding(b.id);
@@ -395,10 +822,48 @@ export class WorldScene extends Phaser.Scene {
         if (built) this.applyBuiltVisual(n, b);
       });
 
-      // Wildziege auf der Weide im Südosten
-      const wildGoat = this.addNode('wild_goat', 'goat', undefined, 635, 375, false);
-      wildGoat.sprite.setScale(0.55).play('goat-idle');
-      wildGoat.label = this.addLabel(635, 355, 'Wildziege');
+      // Frei umherziehende Wildziegen-Herde auf der südöstlichen Weide
+      // Jede Wildziege ist ein vollwertiger `wild_goat`-Interaktionsknoten und bleibt stehen / kommt näher,
+      // sobald der Spieler mit Getreide herantritt!
+      const goatSpawns: Array<[number, number]> = [
+        [632, 372],
+        [668, 395],
+      ];
+      goatSpawns.forEach(([gx, gy]) => {
+        const wg = this.addNode('wild_goat', 'goat', undefined, gx, gy, false);
+        wg.sprite.setScale(0.55).play('goat-idle');
+        wg.label = this.addLabel(gx, gy - 18, 'Wildziege');
+        this.wildlife.addAnimal({
+          kind: 'wild_goat',
+          sprite: wg.sprite,
+          bounds: { minX: 595, maxX: 705, minY: 342, maxY: 422 },
+          speed: 19,
+          idleAnim: 'goat-idle',
+          walkAnim: 'goat-walk',
+          labelOffsetY: -18,
+          syncLabel: (nx, ny) => wg.label?.setPosition(nx, ny),
+        });
+      });
+
+      // Friedlich grasende Auerochsen / Ur-Rinder auf den Außenweiden
+      const cattleSpawns: Array<[number, number, { minX: number; maxX: number; minY: number; maxY: number }]> = [
+        [688, 282, { minX: 650, maxX: 725, minY: 255, maxY: 318 }],
+        [235, 495, { minX: 195, maxX: 285, minY: 468, maxY: 532 }],
+      ];
+      cattleSpawns.forEach(([cx, cy, bounds]) => {
+        const cowSprite = this.add.sprite(cx, cy, 'cow', 0).setScale(0.56).setTint(0xc89b7b).setDepth(cy + 10);
+        const cowLabel = this.addLabel(cx, cy - 20, 'Auerochse', '#e6ccb2');
+        this.wildlife.addAnimal({
+          kind: 'auerochse',
+          sprite: cowSprite,
+          bounds,
+          speed: 14,
+          idleAnim: 'cow-idle',
+          walkAnim: 'cow-walk',
+          labelOffsetY: -20,
+          syncLabel: (nx, ny) => cowLabel.setPosition(nx, ny),
+        });
+      });
 
       if (state.goatsTamed > 0) {
         this.spawnTamedGoat();
@@ -411,14 +876,17 @@ export class WorldScene extends Phaser.Scene {
       const my = 478;
       this.add.image(mx, my - 18, 'overworld', 'market_stall').setScale(0.65).setDepth(my - 6);
       const mNode = this.addNode('merchant', 'npc_enki', undefined, mx, my, true);
+      this.setFootBox(mNode.sprite, 12, 8, 2);
       mNode.sprite.setDepth(my + 14);
       this.addLabel(mx, my - 42, 'Fernhändler Enki (Tauschhandel)', '#ffd86b');
     }
 
-    // 7. Begehbarer Höhleneingang in der Nordwand (immer zugänglich für Zuflucht, Höhlenkunst & Bergbau)
-    const cave = this.addNode('mine_entrance', 'overworld', 'cave_entrance', 370, 56, true);
-    cave.sprite.setDepth(64);
-    this.addLabel(370, 22, 'Höhle & Bergbau-Stollen [E]', '#ffcc88');
+    // 7. Begehbarer Höhleneingang in der Nordwand (authentisches Felsportal `cave_mouth` aus dem world-Atlas)
+    const cave = this.addNode('mine_entrance', 'world', 'cave_mouth', 370, 44, true);
+    cave.sprite.setScale(0.92);
+    this.setFootBox(cave.sprite, 74, 18, 6);
+    cave.sprite.setDepth(62);
+    this.addLabel(370, 16, 'Höhle & Bergbau-Stollen [E]', '#ffcc88');
 
     if (state.chapter >= 5) {
       const copperCoords: Array<[number, number]> = [
@@ -428,6 +896,7 @@ export class WorldScene extends Phaser.Scene {
       ];
       copperCoords.forEach(([x, y]) => {
         const cn = this.addNode('copper_vein', 'copper_vein', undefined, x, y, true);
+        this.setFootBox(cn.sprite, 18, 10, 2);
         cn.label = this.addLabel(x, y - 15, 'Kupfererz', '#ff9d5c');
       });
     }
@@ -440,21 +909,117 @@ export class WorldScene extends Phaser.Scene {
       ];
       ironCoords.forEach(([x, y]) => {
         const ir = this.addNode('iron_vein', 'iron_vein', undefined, x, y, true);
+        this.setFootBox(ir.sprite, 18, 10, 2);
         ir.label = this.addLabel(x, y - 15, 'Eisenerz', '#b8d0eb');
       });
     }
 
     // 8. Urzeit-Relikte in der Oberwelt (echte 16-Bit-Grafiken, verschwinden nach Bergung)
-    if (!state.relicsFound.includes('oetzi_dolch')) {
+    if (state.chapter >= 4 && !state.relicsFound.includes('oetzi_dolch')) {
       const oetziNode = this.addNode('relic_oetzi', 'relic_oetzi', undefined, 210, 52, true);
       oetziNode.sprite.setScale(0.35);
+      this.setFootBox(oetziNode.sprite, 12, 8, 2);
       oetziNode.label = this.addLabel(210, 34, '🗡️ Ötzis Kupferdolch', '#fbbf24');
     }
 
-    if (!state.relicsFound.includes('himmelsscheibe')) {
-      const nebraNode = this.addNode('relic_himmelsscheibe', 'relic_nebra', undefined, 540, 360, true);
+    if (state.chapter >= 5 && !state.relicsFound.includes('himmelsscheibe')) {
+      const nebraNode = this.addNode('relic_himmelsscheibe', 'relic_nebra', undefined, 575, 470, true);
       nebraNode.sprite.setScale(0.75);
-      nebraNode.label = this.addLabel(540, 342, '✨ Himmelsscheibe von Nebra', '#38bdf8');
+      this.setFootBox(nebraNode.sprite, 14, 10, 2);
+      nebraNode.label = this.addLabel(575, 452, '✨ Himmelsscheibe von Nebra', '#38bdf8');
+    }
+  }
+
+  /** Platziert epochenspezifische atmosphärische Dekorationen (Zelte, Racks, Brunnen, Bienenstöcke, Steinkreis etc.) */
+  private placeAtmosphericProps(): void {
+    // Wegweiser seitlich der zentralen Dorfkreuzung
+    this.placeDecor('sign_a', 376, 304);
+
+    // 1. Kapitel 1 & 2: Nomadenlager der Altsteinzeit / Mittelsteinzeit
+    if (state.chapter <= 2) {
+      // Otas Mammuthaut-Tipi direkt hinter Otas Stammplatz
+      const tent = this.makeObstacle(370, 268, 'prop_tent_ota', undefined, true);
+      this.setFootBox(tent, 46, 18, 4);
+      tent.setDepth(268 + 16);
+
+      // Zweites kleineres Jägerzelt aus dem Hunter-Settlement-Pack im westlichen Lager
+      this.placeDecor('tent_brown', 304, 246);
+
+      // Felltrockengestell & Fleisch-Räuchergestell am Lagerplatz
+      this.placeDecor('hide_rack_a', 326, 274);
+      this.placeDecor('meat_rack_a', 422, 274);
+      this.placeDecor('cauldron_fire', 436, 316);
+
+      // Fisch-Trockengestell & Korb am Ufer des Sees
+      this.placeDecor('fish_rack', 590, 172);
+      this.placeDecor('basket_a', 614, 178);
+
+      // Mammut-Knochenhaufen, Totem und Schädel im nördlichen Jagdrevier
+      const bones = this.makeObstacle(255, 110, 'prop_bone_pile', undefined, true);
+      this.setFootBox(bones, 26, 12, 2);
+      bones.setDepth(110 + 8);
+
+      const skull = this.makeObstacle(440, 112, 'prop_mammoth_skull', undefined, true);
+      this.setFootBox(skull, 20, 12, 2);
+      skull.setDepth(112 + 8);
+
+      this.placeDecor('totem', 348, 124);
+    } else {
+      // Kapitel 3+: Sesshaftes Dorfleben mit Dorfbrunnen neben dem Platz, Rundhaus & Hof-Details
+      this.placeDecor('well', 448, 344);
+      this.placeDecor('hut_round_a', 498, 404);
+      this.placeDecor('logs_b', 350, 278);
+      this.placeDecor('barrel_a', 368, 278);
+      this.placeDecor('sign_b', 422, 408);
+    }
+
+    // 2. Kapitel 2+: Tonkrüge an der Lehm-Schöpfstelle
+    if (state.chapter >= 2) {
+      const pots = this.makeObstacle(575, 226, 'prop_pots_group', undefined, true);
+      this.setFootBox(pots, 20, 10, 2);
+      pots.setDepth(226 + 6);
+    }
+
+    // 3. Kapitel 3+: Bauerndorf mit Heuschobern, Vogelscheuche, Schubkarre & Bienenstöcken
+    if (state.chapter >= 3) {
+      const hay1 = this.makeObstacle(460, 245, 'prop_haystack', undefined, true);
+      this.setFootBox(hay1, 28, 16, 4);
+      hay1.setDepth(245 + 16);
+
+      const hay2 = this.makeObstacle(580, 248, 'prop_haystack', undefined, true);
+      this.setFootBox(hay2, 28, 16, 4);
+      hay2.setDepth(248 + 16);
+
+      // Vogelscheuche & Schubkarre am Feldrand + Bienenstöcke am östlichen Wiesenrand
+      this.placeDecor('scarecrow_a', 474, 272);
+      this.placeDecor('wheelbarrow_hay', 566, 282);
+      this.placeDecor('beehive_a', 612, 252);
+      this.placeDecor('beehive_b', 632, 256);
+    }
+
+    // 4. Kapitel 4+: Fernhandels-Keramik, Kisten & Fässer am Marktstand von Enki
+    if (state.chapter >= 4) {
+      const marketPots = this.makeObstacle(366, 482, 'prop_pots_group', undefined, true);
+      this.setFootBox(marketPots, 20, 10, 2);
+      marketPots.setDepth(482 + 6);
+      this.placeDecor('crate_a', 434, 480);
+      this.placeDecor('sack_a', 448, 484);
+      this.placeDecor('banner_a', 352, 468);
+    }
+
+    // 5. Kapitel 5+: Megalithischer Steinkreis auf dem Sonnenberg (Kultstätte der Himmelsscheibe)
+    if (state.chapter >= 5) {
+      const circle = this.makeObstacle(575, 470, 'prop_stone_circle', undefined, false);
+      circle.setDepth(465);
+      this.placeDecor('totem', 532, 458);
+      this.placeDecor('torch', 542, 492, { collidable: false });
+      this.placeDecor('torch', 608, 492, { collidable: false });
+    }
+
+    // 6. Kapitel 6: Brennholz-Lager & Fässer für die Eisenschmiede
+    if (state.chapter >= 6) {
+      this.placeDecor('logs_a', 306, 178);
+      this.placeDecor('barrel_b', 364, 178);
     }
   }
 
@@ -463,37 +1028,55 @@ export class WorldScene extends Phaser.Scene {
     if (b.id === 'toepferofen') {
       n.sprite.setTexture('kiln');
       n.sprite.setDepth(b.y + 12);
-      this.spawnHelper(b.x + 24, b.y + 4, b.helperName, b.helperSprite ?? 'npc_mila');
+      this.setFootBox(n.sprite, 32, 18, 3);
+      this.spawnHelper(b.x + 26, b.y + 4, b.helperName, b.helperSprite ?? 'npc_mila');
     } else if (b.id === 'speicher') {
-      n.sprite.setTexture('overworld', 'speicher_hut');
-      n.sprite.setDepth(b.y + 18);
-      this.spawnHelper(b.x + 26, b.y + 10, b.helperName, b.helperSprite ?? 'npc_kora');
+      // Authentische Reetdach-Vorratshütte aus dem Stone-Age-Pack statt mittelalterlichem Schuppen
+      n.sprite.setTexture('world', 'hut_round_b');
+      n.sprite.setScale(0.68);
+      n.sprite.setDepth(b.y + 20);
+      this.setFootBox(n.sprite, 38, 18, 4);
+      this.placeDecor('sack_a', b.x - 24, b.y + 14);
+      this.spawnHelper(b.x + 28, b.y + 10, b.helperName, b.helperSprite ?? 'npc_kora');
     } else if (b.id === 'langhaus') {
-      n.sprite.setTexture('overworld', 'langhaus');
-      n.sprite.setDepth(b.y + 30);
-      const body = n.sprite.body as Phaser.Physics.Arcade.StaticBody;
-      body.setSize(68, 36).setOffset(6, 40);
-      n.sprite.refreshBody();
+      // Großes steinzeitliches Reetdach-Langhaus aus dem Hunter-Settlement-Pack
+      n.sprite.setTexture('world', 'house_thatch_big');
+      n.sprite.setScale(0.76);
+      n.sprite.setDepth(b.y + 28);
+      this.setFootBox(n.sprite, 66, 22, 4);
     } else if (b.id === 'gehege') {
-      n.sprite.setTexture('overworld', 'fence_h');
-      // Holzzaun-Rechteck um das Gehege zeichnen
-      for (let dx = -24; dx <= 24; dx += 24) {
-        this.add.image(b.x + dx, b.y - 18, 'overworld', 'fence_h').setDepth(b.y - 10);
-        this.add.image(b.x + dx, b.y + 22, 'overworld', 'fence_h').setDepth(b.y + 24);
+      // Vollständiges Holzzaun-Gehege mit Pfosten, Gatter & Futtertrog aus dem world-Atlas
+      n.sprite.setTexture('world', 'fence_gate');
+      n.sprite.setScale(0.6);
+      n.sprite.setDepth(b.y + 22);
+      this.setFootBox(n.sprite, 22, 6, 2);
+      for (let dx = -26; dx <= 26; dx += 26) {
+        this.placeDecor('fence_a', b.x + dx, b.y - 20, { collidable: true });
+        if (dx !== 0) {
+          this.placeDecor('fence_a', b.x + dx, b.y + 20, { collidable: true });
+        }
       }
-      this.spawnHelper(b.x - 36, b.y + 4, b.helperName, b.helperSprite ?? 'npc_tarek');
+      this.placeDecor('fence_post', b.x - 38, b.y - 4, { collidable: true });
+      this.placeDecor('fence_post', b.x - 38, b.y + 12, { collidable: true });
+      this.placeDecor('fence_post', b.x + 38, b.y - 4, { collidable: true });
+      this.placeDecor('fence_post', b.x + 38, b.y + 12, { collidable: true });
+      this.placeDecor('trough_hay', b.x + 18, b.y - 8, { collidable: true });
+      this.spawnHelper(b.x - 48, b.y + 6, b.helperName, b.helperSprite ?? 'npc_tarek');
     } else if (b.id === 'webstuhl') {
       n.sprite.setTexture('loom');
       n.sprite.setDepth(b.y + 12);
-      this.spawnHelper(b.x - 22, b.y + 6, b.helperName, b.helperSprite ?? 'npc_jana');
+      this.setFootBox(n.sprite, 32, 16, 3);
+      this.spawnHelper(b.x - 24, b.y + 6, b.helperName, b.helperSprite ?? 'npc_jana');
     } else if (b.id === 'schmelzofen') {
       n.sprite.setTexture('smelter');
       n.sprite.setDepth(b.y + 14);
-      this.spawnHelper(b.x - 24, b.y + 6, b.helperName, b.helperSprite ?? 'npc_barak');
+      this.setFootBox(n.sprite, 32, 18, 3);
+      this.spawnHelper(b.x - 26, b.y + 6, b.helperName, b.helperSprite ?? 'npc_barak');
     } else if (b.id === 'schmiede') {
       n.sprite.setTexture('forge');
       n.sprite.setDepth(b.y + 14);
-      this.spawnHelper(b.x - 26, b.y + 6, b.helperName, b.helperSprite ?? 'npc_barak');
+      this.setFootBox(n.sprite, 34, 18, 3);
+      this.spawnHelper(b.x - 28, b.y + 6, b.helperName, b.helperSprite ?? 'npc_barak');
     }
   }
 
@@ -505,11 +1088,21 @@ export class WorldScene extends Phaser.Scene {
 
   private spawnTamedGoat(): void {
     if (this.nodes.some((n) => n.kind === 'tamed_goat')) return;
-    const gx = 530;
-    const gy = 354;
+    const gx = 524;
+    const gy = 352;
     const g = this.addNode('tamed_goat', 'goat', undefined, gx, gy, false);
     g.sprite.setScale(0.55).play('goat-idle').setDepth(gy + 10);
-    g.label = this.addLabel(gx, gy + 18, 'Zahme Ziege', '#bfffbf');
+    g.label = this.addLabel(gx, gy - 16, 'Zahme Ziege', '#bfffbf');
+    this.wildlife.addAnimal({
+      kind: 'tamed_goat',
+      sprite: g.sprite,
+      bounds: { minX: 506, maxX: 548, minY: 338, maxY: 364 },
+      speed: 14,
+      idleAnim: 'goat-idle',
+      walkAnim: 'goat-walk',
+      labelOffsetY: -16,
+      syncLabel: (nx, ny) => g.label?.setPosition(nx, ny),
+    });
   }
 
   private refreshPlotVisual(n: Node, p: FarmPlotState): void {
@@ -518,17 +1111,17 @@ export class WorldScene extends Phaser.Scene {
       n.sprite.setTexture('farm', 'soil_raw').setAlpha(0.75);
       n.cropSprite.setVisible(false);
     } else if (p.stage === 'tilled') {
-      n.sprite.setTexture('farm', 'soil_dry').setAlpha(1);
+      n.sprite.setTexture('farm_soil_dry').setAlpha(1);
       n.cropSprite.setVisible(false);
     } else if (p.stage === 'seeded') {
-      n.sprite.setTexture('farm', 'soil_dry').setAlpha(1);
+      n.sprite.setTexture('farm_soil_dry').setAlpha(1);
       n.cropSprite.setTexture('farm', 'wheat_seed').setPosition(n.sprite.x, n.sprite.y).setVisible(true);
     } else if (p.stage === 'watered') {
-      n.sprite.setTexture('farm', 'soil_wet').setAlpha(1);
-      n.cropSprite.setTexture('farm', 'wheat_sprout').setPosition(n.sprite.x, n.sprite.y - 2).setVisible(true);
+      n.sprite.setTexture('farm_soil_wet').setAlpha(1);
+      n.cropSprite.setTexture('farm_wheat_sprout').setPosition(n.sprite.x, n.sprite.y - 2).setVisible(true);
     } else if (p.stage === 'ripe') {
-      n.sprite.setTexture('farm', 'soil_dry').setAlpha(1);
-      n.cropSprite.setTexture('farm', 'wheat_ripe').setPosition(n.sprite.x, n.sprite.y - 8).setVisible(true);
+      n.sprite.setTexture('farm_soil_dry').setAlpha(1);
+      n.cropSprite.setTexture('farm_wheat_ripe').setPosition(n.sprite.x, n.sprite.y - 6).setVisible(true);
     }
   }
 
@@ -550,8 +1143,7 @@ export class WorldScene extends Phaser.Scene {
     node.sprite.anims.play('fire');
     node.sprite.setScale(1.5);
     node.sprite.setDepth(p.y + 8);
-    (node.sprite.body as Phaser.Physics.Arcade.StaticBody).setSize(10, 6).setOffset(3, 10);
-    node.sprite.refreshBody();
+    this.setFootBox(node.sprite, 10, 6, 2);
     node.glow = this.add.circle(p.x, p.y, 52, 0xffa040, 0).setDepth(8001).setBlendMode(Phaser.BlendModes.ADD);
   }
 
@@ -559,6 +1151,7 @@ export class WorldScene extends Phaser.Scene {
     const node = this.addNode('trap', 'trap', undefined, p.x, p.y);
     node.placed = p;
     node.sprite.setDepth(p.y);
+    this.setFootBox(node.sprite, 12, 8, 2);
     node.bubble = this.add.image(p.x, p.y - 16, 'objects', 'bubble_excl').setDepth(5000).setVisible(false);
   }
 
@@ -570,6 +1163,10 @@ export class WorldScene extends Phaser.Scene {
       this.playerLabel.x = this.player.x;
       this.playerLabel.y = this.player.y - 22;
       this.playerLabel.el.textContent = state.playerName;
+    }
+
+    if (!state.modal && !this.sleeping && this.player) {
+      this.wildlife.update(delta, this.player.x, this.player.y);
     }
     this.syncWorldLabels();
 
@@ -608,6 +1205,7 @@ export class WorldScene extends Phaser.Scene {
     const target = this.nearest();
     state.hint = target ? this.hintFor(target) : '';
     this.updateCompass();
+    if (this.debugEnabled) this.drawDebugOverlay();
 
     const pressed =
       Phaser.Input.Keyboard.JustDown(this.wasd.E) ||
@@ -620,6 +1218,32 @@ export class WorldScene extends Phaser.Scene {
       this.saveTimer = 0;
       this.persist();
     }
+  }
+
+  private drawDebugOverlay(): void {
+    if (!this.debugGraphics) return;
+    this.debugGraphics.clear();
+    // Statische Hindernis-Hitboxen (grün)
+    this.debugGraphics.lineStyle(1, 0x22c55e, 0.85);
+    this.obstacles.getChildren().forEach((c) => {
+      const b = (c as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.StaticBody | null;
+      if (b && b.enable) {
+        this.debugGraphics!.strokeRect(b.x, b.y, b.width, b.height);
+      }
+    });
+    // Interaktions-Reichweiten (gelb)
+    this.debugGraphics.lineStyle(1, 0xfacc15, 0.6);
+    for (const n of this.nodes) {
+      const isLanghaus = n.kind === 'build_site' && n.buildingDef?.id === 'langhaus';
+      const extraReach =
+        n.kind === 'mine_entrance' ? 22 : isLanghaus ? 28 : n.kind === 'wild_goat' ? 18 : 0;
+      const targetY = isLanghaus ? n.sprite.y + 26 : n.sprite.y + (n.kind === 'ota' ? 8 : 4);
+      this.debugGraphics.strokeCircle(n.sprite.x, targetY, REACH + extraReach);
+    }
+    // Spieler-Fußbox (hellblau)
+    const pb = this.player.body as Phaser.Physics.Arcade.Body;
+    this.debugGraphics.lineStyle(1.5, 0x38bdf8, 1);
+    this.debugGraphics.strokeRect(pb.x, pb.y, pb.width, pb.height);
   }
 
   private updateCompass(): void {
@@ -861,8 +1485,14 @@ export class WorldScene extends Phaser.Scene {
   private updateNodes(): void {
     const now = Date.now();
     for (const n of this.nodes) {
-      if (
-        n.kind === 'berry' ||
+      if (n.kind === 'berry' && n.fullFrame && n.emptyFrame) {
+        const depleted = now < n.readyAt;
+        const targetFrame = depleted ? n.emptyFrame : n.fullFrame;
+        if (n.sprite.frame.name !== targetFrame) {
+          n.sprite.setFrame(targetFrame);
+        }
+        n.sprite.setAlpha(1);
+      } else if (
         n.kind === 'stump' ||
         n.kind === 'rock' ||
         n.kind === 'wildgrain' ||
@@ -887,15 +1517,21 @@ export class WorldScene extends Phaser.Scene {
         }
       }
     }
-    // Gezähmter Hund folgt dem Spieler in gemütlichem Abstand
+    // Gezähmter Hund folgt dem Spieler in gemütlichem Abstand (stört nicht beim Interagieren)
     if (state.wolfTamed && this.wolfNode) {
       const ws = this.wolfNode.sprite;
       const d = Phaser.Math.Distance.Between(ws.x, ws.y, this.player.x, this.player.y);
-      if (d > 34) {
+      if (d > 46) {
         const angle = Phaser.Math.Angle.Between(ws.x, ws.y, this.player.x, this.player.y);
         ws.x += Math.cos(angle) * 1.1;
         ws.y += Math.sin(angle) * 1.1;
         ws.setFlipX(Math.cos(angle) < 0);
+        ws.setDepth(ws.y + 8);
+        this.wolfNode.label?.setPosition(ws.x, ws.y - 14);
+      } else if (d < 32) {
+        const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, ws.x, ws.y);
+        ws.x += Math.cos(angle) * 0.9;
+        ws.y += Math.sin(angle) * 0.9;
         ws.setDepth(ws.y + 8);
         this.wolfNode.label?.setPosition(ws.x, ws.y - 14);
       }
@@ -909,17 +1545,24 @@ export class WorldScene extends Phaser.Scene {
     const fy = this.player.y + 8;
     let best: Node | null = null;
     let bestD = REACH;
+    let petCandidate: Node | null = null;
     for (const n of this.nodes) {
       const isLanghaus = n.kind === 'build_site' && n.buildingDef?.id === 'langhaus';
-      const extraReach = n.kind === 'mine_entrance' ? 18 : isLanghaus ? 26 : 0;
+      const isTamedWolf = n.kind === 'wolf' && state.wolfTamed;
+      const extraReach =
+        n.kind === 'mine_entrance' ? 22 : isLanghaus ? 28 : n.kind === 'wild_goat' ? 18 : 0;
       const targetY = isLanghaus ? n.sprite.y + 26 : n.sprite.y + (n.kind === 'ota' ? 8 : 4);
       const d = Phaser.Math.Distance.Between(fx, fy, n.sprite.x, targetY) - extraReach;
+      if (isTamedWolf) {
+        if (d < 22) petCandidate = n;
+        continue;
+      }
       if (d < bestD) {
         best = n;
         bestD = d;
       }
     }
-    return best;
+    return best ?? petCandidate;
   }
 
   private hintFor(n: Node): string {
@@ -1053,7 +1696,7 @@ export class WorldScene extends Phaser.Scene {
         this.interactBuilding(n);
         break;
       case 'wild_goat':
-        this.interactWildGoat();
+        this.interactWildGoat(n);
         break;
       case 'tamed_goat': {
         if (now < n.readyAt) return;
@@ -1234,7 +1877,7 @@ export class WorldScene extends Phaser.Scene {
     state.emit('toast', `${b.name} fertiggestellt! ${b.helperName} hilft jetzt im Dorf.`);
   }
 
-  private interactWildGoat(): void {
+  private interactWildGoat(n: Node): void {
     if (!state.hasBuilding('gehege')) {
       state.emit('toast', 'Baue zuerst das Tiergehege am Bauplatz im Osten!');
       return;
@@ -1245,6 +1888,9 @@ export class WorldScene extends Phaser.Scene {
     }
     state.add('getreide', -1);
     state.goatsTamed++;
+    if (this.nodes.filter((x) => x.kind === 'wild_goat').length > 1) {
+      this.removeNode(n);
+    }
     this.spawnTamedGoat();
     state.unlock('domestizierung');
     state.checkQuest();

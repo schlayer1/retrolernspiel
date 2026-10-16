@@ -118,6 +118,8 @@ export class BootScene extends Phaser.Scene {
     const bar = this.add.rectangle(w / 2 - 60, h / 2, 0, 6, 0xe8c170).setOrigin(0, 0.5);
     this.load.on('progress', (p: number) => (bar.width = 120 * p));
 
+    this.load.atlas('world', 'assets/world/world_atlas.png', 'assets/world/world_atlas.json');
+    this.load.image('ground_a2', 'assets/world/ground_a2.png');
     this.load.image('overworld', 'assets/gfx/Overworld.png');
     this.load.image('objects', 'assets/gfx/objects.png');
     this.load.image('farm', 'assets/gfx/farm.png');
@@ -125,6 +127,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image('cave_tiles', 'assets/gfx/cave.png');
     this.load.image('inner_tiles', 'assets/gfx/Inner.png');
     this.load.spritesheet('goat', 'assets/gfx/goat.png', { frameWidth: 80, frameHeight: 80 });
+    this.load.spritesheet('cow', 'assets/gfx/cow.png', { frameWidth: 80, frameHeight: 80 });
     this.load.spritesheet('player', 'assets/gfx/character.png', { frameWidth: 16, frameHeight: 32 });
     this.load.spritesheet('characters_all', 'assets/gfx/characters.png', { frameWidth: 16, frameHeight: 16 });
 
@@ -142,6 +145,35 @@ export class BootScene extends Phaser.Scene {
     this.load.image('prop_sack', 'assets/props/sack.png');
     this.load.image('prop_barrel', 'assets/props/barrel.png');
     this.load.image('prop_hay', 'assets/props/hay.png');
+
+    // Neue hochwertige 16-Bit-Werkstätten & Gebäude-Props
+    this.load.image('kiln', 'assets/props/kiln.png');
+    this.load.image('loom', 'assets/props/loom.png');
+    this.load.image('smelter', 'assets/props/smelter.png');
+    this.load.image('forge', 'assets/props/forge.png');
+    this.load.image('clay_pile', 'assets/props/clay_pile.png');
+    this.load.image('trap', 'assets/props/trap_active.png');
+
+    // Atmosphärische Welt-Dekorationen & Epochen-Props
+    this.load.image('prop_tent_ota', 'assets/props/tent_ota.png');
+    this.load.image('prop_fur_rack', 'assets/props/fur_rack.png');
+    this.load.image('prop_meat_rack', 'assets/props/meat_rack.png');
+    this.load.image('prop_fish_rack', 'assets/props/fish_rack.png');
+    this.load.image('prop_campfire_pot', 'assets/props/campfire_pot.png');
+    this.load.image('prop_haystack', 'assets/props/haystack.png');
+    this.load.image('prop_water_trough', 'assets/props/water_trough.png');
+    this.load.image('prop_bone_pile', 'assets/props/bone_pile.png');
+    this.load.image('prop_stone_circle', 'assets/props/stone_circle.png');
+    this.load.image('prop_roundhouse', 'assets/props/roundhouse.png');
+    this.load.image('prop_wood_stack', 'assets/props/wood_stack.png');
+    this.load.image('prop_mammoth_skull', 'assets/props/mammoth_skull.png');
+    this.load.image('prop_pots_group', 'assets/props/pots_group.png');
+
+    // Neue Feldbau-Stufen (hochauflösend & detailreich)
+    this.load.image('farm_soil_dry', 'assets/props/farm_soil_dry.png');
+    this.load.image('farm_soil_wet', 'assets/props/farm_soil_wet.png');
+    this.load.image('farm_wheat_sprout', 'assets/props/farm_wheat_sprout.png');
+    this.load.image('farm_wheat_ripe', 'assets/props/farm_wheat_ripe.png');
 
     // Authentische 16-Bit-Relikt-Icons
     this.load.image('relic_venus', 'assets/icons/relic_venus.png');
@@ -169,6 +201,19 @@ export class BootScene extends Phaser.Scene {
     for (const [name, [x, y, fw, fh]] of Object.entries(CAVE_FRAMES)) cv.add(name, 0, x, y, fw, fh);
     const inn = this.textures.get('inner_tiles');
     for (const [name, [x, y, fw, fh]] of Object.entries(INNER_FRAMES)) inn.add(name, 0, x, y, fw, fh);
+
+    // 32x32 nahtlose Boden-Kacheln aus Hunter Settlement Tile_A2-1 (ground_a2)
+    const gr = this.textures.get('ground_a2');
+    const groundFrames: Record<string, [number, number, number, number]> = {
+      grassA: [32, 224, 32, 32],
+      grassB: [128, 224, 32, 32],
+      dirtA: [32, 64, 32, 32],
+      dirtB: [128, 64, 32, 32],
+      sandA: [224, 64, 32, 32],
+      sandC: [224, 224, 32, 32],
+      cobA: [224, 480, 32, 32],
+    };
+    for (const [name, [x, y, fw, fh]] of Object.entries(groundFrames)) gr.add(name, 0, x, y, fw, fh);
 
     for (const id of Object.keys(ITEMS)) this.textures.get(`icon-${id}`).setFilter(Phaser.Textures.FilterMode.LINEAR);
 
@@ -222,6 +267,30 @@ export class BootScene extends Phaser.Scene {
       key: 'fire',
       frames: Array.from({ length: 7 }, (_, i) => ({ key: 'objects', frame: `fire${i}` })),
       frameRate: 10,
+      repeat: -1,
+    });
+
+    // Wild- & Nutztier-Animationen (Ziege & Auerochse/Rind)
+    this.anims.create({
+      key: 'goat-idle',
+      frames: [{ key: 'goat', frame: 0 }],
+      frameRate: 1,
+    });
+    this.anims.create({
+      key: 'goat-walk',
+      frames: this.anims.generateFrameNumbers('goat', { start: 4, end: 7 }),
+      frameRate: 6,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: 'cow-idle',
+      frames: [{ key: 'cow', frame: 0 }],
+      frameRate: 1,
+    });
+    this.anims.create({
+      key: 'cow-walk',
+      frames: this.anims.generateFrameNumbers('cow', { start: 4, end: 7 }),
+      frameRate: 5,
       repeat: -1,
     });
 
@@ -322,44 +391,40 @@ export class BootScene extends Phaser.Scene {
 
   /** Extrahiert scharfe Data-URLs der Spielgrafiken für den Start- und Pausescreen. */
   private extractPreviewImages(): void {
-    const cropToDataUrl = (texKey: string, sx: number, sy: number, sw: number, sh: number): string => {
+    const toDataUrl = (texKey: string, sx?: number, sy?: number, sw?: number, sh?: number): string => {
       const src = this.textures.get(texKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+      const w = sw ?? src.width;
+      const h = sh ?? src.height;
+      const x = sx ?? 0;
+      const y = sy ?? 0;
       const c = document.createElement('canvas');
-      c.width = sw;
-      c.height = sh;
+      c.width = w;
+      c.height = h;
       const ctx = c.getContext('2d')!;
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+      ctx.drawImage(src, x, y, w, h, 0, 0, w, h);
       return c.toDataURL();
     };
 
-    state.malePreviewUrl = cropToDataUrl('player', 0, 6, 16, 26);
-    state.femalePreviewUrl = cropToDataUrl('player_female', 0, 6, 16, 26);
+    state.malePreviewUrl = toDataUrl('player', 0, 6, 16, 26);
+    state.femalePreviewUrl = toDataUrl('player_female', 0, 6, 16, 26);
 
     state.showcaseSprites = {
-      fire: cropToDataUrl('objects', 64, 48, 16, 16),
-      wolf: cropToDataUrl('wolf', 0, 0, 20, 16),
-      kiln: cropToDataUrl('kiln', 0, 0, 32, 32),
-      loom: cropToDataUrl('loom', 0, 0, 32, 32),
-      smelter: cropToDataUrl('smelter', 0, 0, 36, 36),
-      forge: cropToDataUrl('forge', 0, 0, 40, 36),
-      langhaus: cropToDataUrl('overworld', 96, 0, 80, 80),
-      market: cropToDataUrl('overworld', 288, 368, 96, 80),
-      goat: cropToDataUrl('goat', 24, 24, 36, 36),
+      fire: toDataUrl('objects', 64, 48, 16, 16),
+      wolf: toDataUrl('wolf', 0, 0, 20, 16),
+      kiln: toDataUrl('kiln'),
+      loom: toDataUrl('loom'),
+      smelter: toDataUrl('smelter'),
+      forge: toDataUrl('forge'),
+      langhaus: toDataUrl('overworld', 96, 0, 80, 80),
+      market: toDataUrl('overworld', 288, 368, 96, 80),
+      goat: toDataUrl('goat', 24, 24, 36, 36),
     };
   }
 
-  /** Erzeugt saubere 16-Bit-Pixel-Sprites für Falle, Wolf/Hund, Lehmhaufen, Öfen, Webstuhl und Erzadern. */
+  /** Erzeugt saubere 16-Bit-Pixel-Sprites für Wolf/Hund und Erzadern. */
   private createCustomSprites(): void {
-    // 1. Falle (gekreuzte Holzstöcke)
-    const g1 = this.add.graphics();
-    g1.fillStyle(0x5a3a1a, 1).fillRect(1, 11, 14, 3);
-    g1.fillStyle(0x8b5a2b, 1).fillRect(1, 10, 14, 2).fillRect(2, 4, 2, 8).fillRect(12, 4, 2, 8).fillRect(2, 4, 12, 2);
-    g1.fillStyle(0xc9a063, 1).fillRect(2, 4, 12, 1);
-    g1.generateTexture('trap', 16, 16);
-    g1.destroy();
-
-    // 2. Wolf / Hütehund (20x16 Pixelart)
+    // 1. Wolf / Hütehund (20x16 Pixelart)
     const g2 = this.add.graphics();
     g2.fillStyle(0x2b2b33, 1).fillRect(3, 13, 14, 2); // Schatten
     g2.fillStyle(0x7a7e8a, 1).fillRect(4, 6, 10, 6); // Körper
@@ -372,64 +437,6 @@ export class BootScene extends Phaser.Scene {
     g2.fillStyle(0x1f1f24, 1).fillRect(17, 6, 1, 1); // Nase
     g2.generateTexture('wolf', 20, 16);
     g2.destroy();
-
-    // 3. Lehmhaufen am Ufer (16x16)
-    const g3 = this.add.graphics();
-    g3.fillStyle(0x4a2e1b, 1).fillEllipse(8, 11, 14, 7);
-    g3.fillStyle(0x8c5230, 1).fillEllipse(8, 9, 12, 6);
-    g3.fillStyle(0xb86f43, 1).fillEllipse(7, 8, 7, 3);
-    g3.generateTexture('clay_pile', 16, 16);
-    g3.destroy();
-
-    // 4. Töpferofen (32x32 Lehmkuppel mit Glutöffnung)
-    const g4 = this.add.graphics();
-    g4.fillStyle(0x3a2314, 1).fillEllipse(16, 26, 28, 10);
-    g4.fillStyle(0x8c5230, 1).fillEllipse(16, 18, 24, 20);
-    g4.fillStyle(0xb86f43, 1).fillEllipse(14, 14, 16, 12);
-    g4.fillStyle(0x2a180d, 1).fillRect(11, 19, 10, 8);
-    g4.fillStyle(0xff7722, 1).fillRect(13, 21, 6, 5);
-    g4.fillStyle(0xffdd55, 1).fillRect(14, 22, 4, 3);
-    g4.generateTexture('kiln', 32, 32);
-    g4.destroy();
-
-    // 5. Gewichtswebstuhl (32x32 Holzrahmen mit Kettfäden, Tuchbahn und Tongewichten)
-    const g5 = this.add.graphics();
-    g5.fillStyle(0x3a2314, 1).fillEllipse(16, 28, 26, 6);
-    g5.fillStyle(0x6b4226, 1).fillRect(5, 4, 3, 24).fillRect(24, 4, 3, 24).fillRect(4, 4, 24, 3);
-    g5.fillStyle(0xd8c8a8, 1).fillRect(9, 7, 14, 9); // Gewebtes Tuch oben
-    g5.fillStyle(0xb3472b, 1).fillRect(9, 10, 14, 2); // Rotes Zierband
-    g5.fillStyle(0xe8dec5, 1);
-    for (let x = 10; x <= 21; x += 2) g5.fillRect(x, 16, 1, 8); // Kettfäden
-    g5.fillStyle(0x8c5230, 1);
-    for (let x = 9; x <= 21; x += 3) g5.fillRect(x, 24, 2, 3); // Tongewichte unten
-    g5.generateTexture('loom', 32, 32);
-    g5.destroy();
-
-    // 6. Schmelzofen (36x36 Steinschachtofen mit Blasebalg und heller Kupferglut)
-    const g6 = this.add.graphics();
-    g6.fillStyle(0x222026, 1).fillEllipse(18, 31, 30, 8);
-    g6.fillStyle(0x5c5b66, 1).fillRect(7, 8, 22, 22);
-    g6.fillStyle(0x7c7b88, 1).fillRect(9, 6, 18, 18);
-    g6.fillStyle(0x3e3d47, 1).fillRect(11, 4, 14, 4); // Schlotöffnung
-    g6.fillStyle(0xff6600, 1).fillRect(13, 3, 10, 2); // Glut oben
-    g6.fillStyle(0x1b181f, 1).fillRect(12, 20, 12, 9); // Abstichloch
-    g6.fillStyle(0xff8822, 1).fillRect(14, 22, 8, 6);
-    g6.fillStyle(0xffee66, 1).fillRect(15, 24, 6, 3);
-    g6.fillStyle(0x6b4226, 1).fillRect(2, 22, 6, 6); // Blasebalg links
-    g6.generateTexture('smelter', 36, 36);
-    g6.destroy();
-
-    // 7. Eisenschmiede (40x36 Esse + dunkler Eisenamboss)
-    const g7 = this.add.graphics();
-    g7.fillStyle(0x222026, 1).fillEllipse(20, 31, 36, 8);
-    g7.fillStyle(0x4a4952, 1).fillRect(4, 12, 20, 18); // Steinesse
-    g7.fillStyle(0xff5500, 1).fillRect(7, 10, 14, 4);
-    g7.fillStyle(0xffdd44, 1).fillRect(9, 11, 10, 2);
-    g7.fillStyle(0x6b4226, 1).fillRect(27, 23, 10, 7); // Holzklotz unter Amboss
-    g7.fillStyle(0x2f3540, 1).fillRect(25, 18, 14, 5).fillRect(28, 22, 8, 2); // Amboss
-    g7.fillStyle(0x667080, 1).fillRect(26, 18, 12, 2); // Glänzende Ambossbahn
-    g7.generateTexture('forge', 40, 36);
-    g7.destroy();
 
     // 8. Kupfererz-Ader (24x22 Fels mit grün-goldenen Malachit/Kupfer-Adern)
     const g8 = this.add.graphics();

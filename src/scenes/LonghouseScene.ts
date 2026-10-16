@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { sfx } from '../audio/sound';
+import { music } from '../audio/MusicManager';
 import { state } from '../systems/GameState';
 import { FarmPlotState } from '../systems/SaveManager';
 
@@ -96,6 +97,7 @@ export class LonghouseScene extends Phaser.Scene {
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE') as typeof this.wasd;
 
     state.emit('toast', 'Du betrittst das warme Langhaus der Sippe.');
+    music.playTrack('warmth', 1200);
     sfx.door?.() ?? sfx.step();
   }
 
@@ -142,6 +144,8 @@ export class LonghouseScene extends Phaser.Scene {
       this.playerLabel.x = this.player.x;
       this.playerLabel.y = this.player.y - 20;
     }
+
+    this.player.setDepth(this.player.y + 12);
 
     // Interaktions-Check & gestochen scharfe Label-Synchronisation
     this.checkInteractions();
@@ -263,9 +267,24 @@ export class LonghouseScene extends Phaser.Scene {
     addWallZone(15 * TILE, (HOUSE_H - 1) * TILE, 11 * TILE, 16);
   }
 
+  private makeObstacle(x: number, y: number, tex: string, frame?: string | number, collidable = true): Phaser.Physics.Arcade.Sprite {
+    const o = (
+      collidable ? this.obstacles.create(x, y, tex, frame) : this.physics.add.staticSprite(x, y, tex, frame)
+    ) as Phaser.Physics.Arcade.Sprite;
+    o.setDepth(y + o.height / 2);
+    const b = o.body as Phaser.Physics.Arcade.StaticBody;
+    b.setSize(o.width * 0.7, o.height * 0.45);
+    b.setOffset(o.width * 0.15, o.height * 0.55);
+    o.refreshBody();
+    return o;
+  }
+
   private spawnHouseNodes(): void {
     // 1. Schlaffelle (Echtes Pixel-Art Bärenfellbett)
-    const bedSpr = this.add.image(76, 76, 'prop_bed').setDepth(60);
+    const bedSpr = this.makeObstacle(76, 76, 'prop_bed', undefined, true);
+    (bedSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(34, 24).setOffset(6, 16);
+    bedSpr.refreshBody();
+    bedSpr.setDepth(76 + 12);
     this.nodes.push({
       kind: 'bed',
       x: 76,
@@ -276,8 +295,11 @@ export class LonghouseScene extends Phaser.Scene {
     });
 
     // 2. Sippen-Feuerstelle & Herdfeuer
-    const fireSpr = this.add.image(180, 135, 'prop_fireplace').setDepth(60);
-    this.add.sprite(180, 134, 'objects', 'fire0').setDepth(62).play('fire');
+    const fireSpr = this.makeObstacle(180, 135, 'prop_fireplace', undefined, true);
+    (fireSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(28, 16).setOffset(4, 16);
+    fireSpr.refreshBody();
+    fireSpr.setDepth(135 + 8);
+    this.add.sprite(180, 134, 'objects', 'fire0').setDepth(135 + 9).play('fire');
     this.nodes.push({
       kind: 'fire',
       x: 180,
@@ -288,10 +310,26 @@ export class LonghouseScene extends Phaser.Scene {
     });
 
     // 3. Gemeinschaftstruhe & Vorräte im Nordosten
-    const chestSpr = this.add.image(320, 65, 'prop_chest').setScale(1.2).setDepth(60);
-    this.add.image(350, 65, 'prop_sack').setDepth(58);
-    this.add.image(375, 68, 'prop_barrel').setDepth(58);
-    this.add.image(355, 95, 'prop_hay').setDepth(58);
+    const chestSpr = this.makeObstacle(320, 65, 'prop_chest', undefined, true);
+    chestSpr.setScale(1.2);
+    (chestSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(24, 14).setOffset(4, 12);
+    chestSpr.refreshBody();
+    chestSpr.setDepth(65 + 10);
+
+    const sack = this.makeObstacle(350, 65, 'prop_sack', undefined, true);
+    (sack.body as Phaser.Physics.Arcade.StaticBody).setSize(16, 12).setOffset(2, 6);
+    sack.refreshBody();
+    sack.setDepth(65 + 8);
+
+    const barrel = this.makeObstacle(375, 68, 'prop_barrel', undefined, true);
+    (barrel.body as Phaser.Physics.Arcade.StaticBody).setSize(18, 16).setOffset(3, 10);
+    barrel.refreshBody();
+    barrel.setDepth(68 + 12);
+
+    const hay = this.makeObstacle(355, 95, 'prop_hay', undefined, true);
+    (hay.body as Phaser.Physics.Arcade.StaticBody).setSize(26, 18).setOffset(3, 8);
+    hay.refreshBody();
+    hay.setDepth(95 + 10);
 
     this.nodes.push({
       kind: 'chest',
@@ -303,15 +341,27 @@ export class LonghouseScene extends Phaser.Scene {
     });
 
     // 4. Sippentisch mit Hockern
-    const tableSpr = this.add.image(275, 140, 'prop_table').setDepth(60);
-    this.add.image(250, 140, 'inner_tiles', 'stool').setDepth(58);
-    this.add.image(300, 140, 'inner_tiles', 'stool').setDepth(58);
-    const tableZone = this.add.zone(255, 125, 42, 30).setOrigin(0);
-    this.physics.add.existing(tableZone, true);
-    this.obstacles.add(tableZone);
+    const tableSpr = this.makeObstacle(275, 140, 'prop_table', undefined, true);
+    (tableSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(36, 16).setOffset(6, 12);
+    tableSpr.refreshBody();
+    tableSpr.setDepth(140 + 10);
+
+    const stoolL = this.makeObstacle(250, 140, 'inner_tiles', 'stool', true);
+    (stoolL.body as Phaser.Physics.Arcade.StaticBody).setSize(12, 10).setOffset(2, 6);
+    stoolL.refreshBody();
+    stoolL.setDepth(140 + 6);
+
+    const stoolR = this.makeObstacle(300, 140, 'inner_tiles', 'stool', true);
+    (stoolR.body as Phaser.Physics.Arcade.StaticBody).setSize(12, 10).setOffset(2, 6);
+    stoolR.refreshBody();
+    stoolR.setDepth(140 + 6);
 
     // 5. Sippenmutter Alva am Herdfeuer (vollwertiger 16x32-Charakter)
-    const elderSpr = this.add.sprite(140, 135, 'npc_alva', 0).setDepth(60);
+    const elderSpr = this.makeObstacle(140, 135, 'npc_alva', 0, true);
+    (elderSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(10, 8).setOffset(3, 22);
+    elderSpr.refreshBody();
+    elderSpr.setDepth(135 + 14);
+
     this.nodes.push({
       kind: 'elder',
       x: 140,
@@ -455,6 +505,7 @@ export class LonghouseScene extends Phaser.Scene {
         worldScene.cameras.main.fadeIn(350, 0, 0, 0);
       }
       state.hint = '';
+      music.playChapterMusic(state.chapter, 1200);
       state.emit('toast', 'Du trittst aus dem Langhaus zurück ins Dorf.');
     });
   }

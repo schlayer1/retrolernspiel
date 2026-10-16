@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { sfx } from '../audio/sound';
+import { music } from '../audio/MusicManager';
 import { state } from '../systems/GameState';
 
 const CAVE_W = 32;
@@ -109,6 +110,7 @@ export class CaveScene extends Phaser.Scene {
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,E,SPACE') as typeof this.wasd;
 
     state.emit('toast', 'Du betrittst die Höhle. Deine Fackel erhellt die Felswände!');
+    music.playTrack(state.chapter >= 5 ? 'oracle' : 'mist', 1200);
     sfx.cave?.() ?? sfx.step();
   }
 
@@ -155,6 +157,8 @@ export class CaveScene extends Phaser.Scene {
       this.playerLabel.x = this.player.x;
       this.playerLabel.y = this.player.y - 20;
     }
+
+    this.player.setDepth(this.player.y + 12);
 
     // Fackellicht-Overlay aktualisieren
     this.updateTorchLight();
@@ -322,6 +326,18 @@ export class CaveScene extends Phaser.Scene {
     addWallZone(4 * TILE, 10 * TILE, 7 * TILE, 4 * TILE);
   }
 
+  private makeObstacle(x: number, y: number, tex: string, frame?: string | number, collidable = true): Phaser.Physics.Arcade.Sprite {
+    const o = (
+      collidable ? this.obstacles.create(x, y, tex, frame) : this.physics.add.staticSprite(x, y, tex, frame)
+    ) as Phaser.Physics.Arcade.Sprite;
+    o.setDepth(y + o.height / 2);
+    const b = o.body as Phaser.Physics.Arcade.StaticBody;
+    b.setSize(o.width * 0.7, o.height * 0.45);
+    b.setOffset(o.width * 0.15, o.height * 0.55);
+    o.refreshBody();
+    return o;
+  }
+
   private spawnCaveNodes(): void {
     // 1. Ausgang zur Oberwelt
     const exitNode: CaveNode = {
@@ -334,8 +350,10 @@ export class CaveScene extends Phaser.Scene {
     };
     this.nodes.push(exitNode);
 
-    // 2. Erzadern
-    const copperSpr = this.add.image(380, 70, 'ores').setDepth(60);
+    // 2. Erzadern (Feste 16-Bit-Kollisionsobjekte)
+    const copperSpr = this.makeObstacle(380, 70, 'ores', undefined, true);
+    (copperSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(18, 14).setOffset(3, 8);
+    copperSpr.refreshBody();
     this.nodes.push({
       kind: 'copper',
       x: 380,
@@ -345,7 +363,9 @@ export class CaveScene extends Phaser.Scene {
       label: this.addLabel(380, 52, 'Kupferader', '#fb923c'),
     });
 
-    const tinSpr = this.add.image(420, 160, 'ores').setDepth(60);
+    const tinSpr = this.makeObstacle(420, 160, 'ores', undefined, true);
+    (tinSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(18, 14).setOffset(3, 8);
+    tinSpr.refreshBody();
     this.nodes.push({
       kind: 'tin',
       x: 420,
@@ -355,7 +375,9 @@ export class CaveScene extends Phaser.Scene {
       label: this.addLabel(420, 142, 'Zinnader', '#cbd5e1'),
     });
 
-    const ironSpr = this.add.image(350, 240, 'ores').setDepth(60);
+    const ironSpr = this.makeObstacle(350, 240, 'ores', undefined, true);
+    (ironSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(18, 14).setOffset(3, 8);
+    ironSpr.refreshBody();
     this.nodes.push({
       kind: 'iron',
       x: 350,
@@ -365,7 +387,9 @@ export class CaveScene extends Phaser.Scene {
       label: this.addLabel(350, 222, 'Eisenerz', '#94a3b8'),
     });
 
-    const flintSpr = this.add.image(190, 80, 'objects', 'bigrock').setDepth(60);
+    const flintSpr = this.makeObstacle(190, 80, 'objects', 'bigrock', true);
+    (flintSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(24, 16).setOffset(4, 10);
+    flintSpr.refreshBody();
     this.nodes.push({
       kind: 'flint',
       x: 190,
@@ -377,7 +401,7 @@ export class CaveScene extends Phaser.Scene {
 
     // 3. Relikte in der Höhle (verschwinden nach erfolgreicher Bergung)
     if (!state.relicsFound.includes('malerei')) {
-      const malereiSpr = this.add.image(270, 48, 'relic_malerei').setDepth(60);
+      const malereiSpr = this.add.image(270, 48, 'relic_malerei').setDepth(48);
       this.nodes.push({
         kind: 'relic_malerei',
         x: 270,
@@ -387,11 +411,14 @@ export class CaveScene extends Phaser.Scene {
         label: this.addLabel(270, 28, 'Wandmalerei', '#f43f5e'),
       });
     } else {
-      this.add.image(270, 48, 'relic_malerei').setDepth(60).setAlpha(0.85);
+      this.add.image(270, 48, 'relic_malerei').setDepth(48).setAlpha(0.85);
     }
 
     if (!state.relicsFound.includes('venus')) {
-      const venusSpr = this.add.image(65, 95, 'relic_venus').setDepth(60);
+      const venusSpr = this.makeObstacle(65, 95, 'relic_venus', undefined, true);
+      (venusSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(16, 16).setOffset(2, 6);
+      venusSpr.refreshBody();
+      venusSpr.setDepth(95 + 8);
       this.nodes.push({
         kind: 'relic_venus',
         x: 65,
@@ -403,7 +430,10 @@ export class CaveScene extends Phaser.Scene {
     }
 
     if (!state.relicsFound.includes('loewenmensch')) {
-      const loewenSpr = this.add.image(440, 65, 'relic_loewenmensch').setDepth(60);
+      const loewenSpr = this.makeObstacle(440, 65, 'relic_loewenmensch', undefined, true);
+      (loewenSpr.body as Phaser.Physics.Arcade.StaticBody).setSize(16, 16).setOffset(2, 6);
+      loewenSpr.refreshBody();
+      loewenSpr.setDepth(65 + 8);
       this.nodes.push({
         kind: 'relic_loewenmensch',
         x: 440,
@@ -413,6 +443,17 @@ export class CaveScene extends Phaser.Scene {
         label: this.addLabel(440, 45, 'Der Löwenmensch', '#eab308'),
       });
     }
+
+    // 4. Urzeitliche Knochenfunde und Mammutreste in der Höhle (solide Hindernisse)
+    const skull = this.makeObstacle(130, 70, 'prop_mammoth_skull', undefined, true);
+    (skull.body as Phaser.Physics.Arcade.StaticBody).setSize(20, 14).setOffset(4, 6);
+    skull.refreshBody();
+    skull.setDepth(70 + 8);
+
+    const bones = this.makeObstacle(80, 220, 'prop_bone_pile', undefined, true);
+    (bones.body as Phaser.Physics.Arcade.StaticBody).setSize(28, 14).setOffset(4, 6);
+    bones.refreshBody();
+    bones.setDepth(220 + 8);
   }
 
   private checkInteractions(): void {
@@ -532,6 +573,7 @@ export class CaveScene extends Phaser.Scene {
         worldScene.cameras.main.fadeIn(350, 0, 0, 0);
       }
       state.hint = '';
+      music.playChapterMusic(state.chapter, 1200);
       state.emit('toast', 'Du trittst wieder hinaus ans helle Tageslicht.');
     });
   }

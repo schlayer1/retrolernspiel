@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { sfx } from '../audio/sound';
+import { music } from '../audio/MusicManager';
 import { CHAPTERS, DialogNode, EPOCH_COMPARISON, HIGHLIGHT_TERMS, LEXICON } from '../data/chapter1';
 import { BUILDINGS, ITEMS, ItemId, RECIPES, Recipe, TRADES, TradeOffer } from '../data/items';
 import { RELICS, RelicDef } from '../data/relics';
@@ -160,6 +161,7 @@ export class UIScene extends Phaser.Scene {
     kb.on('keydown-K', () => !this.isTyping() && this.togglePanel('chapter'));
     kb.on('keydown-U', () => !this.isTyping() && this.togglePanel('cert'));
     kb.on('keydown-F', () => !this.isTyping() && !state.modal && this.pushToast(state.eat()));
+    kb.on('keydown-M', () => !this.isTyping() && this.toggleMusic());
     kb.on('keydown-ESC', () => {
       if (this.isTyping()) {
         (document.activeElement as HTMLElement)?.blur();
@@ -218,9 +220,10 @@ export class UIScene extends Phaser.Scene {
               <span>📖 Wissen</span>
               <div class="hud-bar-track"><div class="hud-bar-fill" id="bar-know" style="background:#e8d25a;width:0%"></div></div>
             </div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:#ffe9b0;margin-top:2px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#ffe9b0;margin-top:2px;gap:6px;">
               <span id="hud-lex-count">Lexikon: 0/27</span>
               <span id="hud-clock">☀️ Tag</span>
+              <span id="hud-music-toggle" style="cursor:pointer;user-select:none;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,0.32);border:1px solid #7c5a2c;" title="Hintergrundmusik an/aus (M)">🎵 Musik: An</span>
             </div>
           </div>
           <div class="hud-btn-row">
@@ -231,6 +234,7 @@ export class UIScene extends Phaser.Scene {
             <button class="retro-btn" data-act="lexicon"><span class="key-badge">L</span> Lexikon</button>
             <button class="retro-btn" data-act="timeline"><span class="key-badge">Z</span> Zeitstrahl</button>
             <button class="retro-btn" data-act="eat"><span class="key-badge">F</span> Essen</button>
+            <button class="retro-btn" data-act="music" title="Hintergrundmusik an/aus (M)"><span class="key-badge">M</span> 🎵 Musik</button>
             <button class="retro-btn" data-act="chapter"><span class="key-badge">K</span> Epoche</button>
             <button class="retro-btn" data-act="cert"><span class="key-badge">U</span> Urkunde</button>
           </div>
@@ -303,11 +307,14 @@ export class UIScene extends Phaser.Scene {
         const act = (btn as HTMLElement).dataset.act;
         if (act === 'eat') {
           if (!state.modal) this.pushToast(state.eat());
+        } else if (act === 'music') {
+          this.toggleMusic();
         } else if (act) {
           this.togglePanel(act as ActivePanel);
         }
       });
     });
+    this.root.querySelector('#hud-music-toggle')?.addEventListener('click', () => this.toggleMusic());
 
     this.dlgNextBtn.addEventListener('click', () => this.advanceDialog());
     this.dlgSpeakBtn.addEventListener('click', () => {
@@ -326,6 +333,8 @@ export class UIScene extends Phaser.Scene {
         else this.closePanels();
       }
     });
+
+    this.updateMusicUI();
   }
 
   // ------------------------------------------------------------ HUD Update
@@ -422,6 +431,34 @@ export class UIScene extends Phaser.Scene {
       this.toastEl.classList.remove('visible');
       this.time.delayedCall(200, () => this.nextToast());
     });
+  }
+
+  // ------------------------------------------------------------ Audio & Musik
+
+  private toggleMusic(): void {
+    const isMuted = music.toggleMute();
+    this.updateMusicUI();
+    const info = music.getCurrentTrackInfo();
+    if (isMuted) {
+      this.pushToast('🔇 Musik stummgeschaltet');
+    } else {
+      this.pushToast(`🎵 Musik an: ${info ? info.title : 'Urzeit-Klänge'}`);
+    }
+  }
+
+  private updateMusicUI(): void {
+    const isMuted = music.isMutedState();
+    const topPill = this.root.querySelector<HTMLElement>('#hud-music-toggle');
+    if (topPill) {
+      topPill.innerHTML = isMuted ? '🔇 Musik: Aus' : '🎵 Musik: An';
+      topPill.style.color = isMuted ? '#f87171' : '#ffe9b0';
+      topPill.style.borderColor = isMuted ? '#ef4444' : '#7c5a2c';
+    }
+    const hudBtn = this.root.querySelector<HTMLElement>('[data-act="music"]');
+    if (hudBtn) {
+      hudBtn.innerHTML = `<span class="key-badge">M</span> ${isMuted ? '🔇 Stumm' : '🎵 Musik'}`;
+      hudBtn.style.color = isMuted ? '#f87171' : '';
+    }
   }
 
   // ------------------------------------------------------------ Modal State
@@ -1235,6 +1272,9 @@ export class UIScene extends Phaser.Scene {
           style="padding:7px 10px;font-size:13.5px;font-weight:800;border:2px solid #8b5a2b;border-radius:7px;background:#fff;color:#2a1d10;width:185px;text-transform:uppercase;"
         />
         <button class="retro-btn" id="start-code-btn">📂 Code laden</button>
+        <button class="retro-btn" id="start-music-btn" title="Hintergrundmusik ein/aus (M)">
+          ${music.isMutedState() ? '🔇 Musik: Aus' : '🎵 Musik: An'}
+        </button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${state.hasHadExistingSaveOnBoot ? `
@@ -1317,6 +1357,15 @@ export class UIScene extends Phaser.Scene {
         this.pushToast('Code nicht erkannt. Format-Beispiel: STZ-MIA-W-J-K3-Q4-12M');
       }
     });
+
+    const startMusicBtn = this.modalFooterEl.querySelector<HTMLElement>('#start-music-btn');
+    if (startMusicBtn) {
+      startMusicBtn.addEventListener('click', () => {
+        const isMuted = music.toggleMute();
+        startMusicBtn.textContent = isMuted ? '🔇 Musik: Aus' : '🎵 Musik: An';
+        this.updateMusicUI();
+      });
+    }
   }
 
   // ------------------------------------------------------------ Relikt-Archäologie Modal
@@ -1565,6 +1614,38 @@ export class UIScene extends Phaser.Scene {
         </div>
       </div>
 
+      <div style="background:#fffdf7;border:2px solid #c29b61;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+          <div style="font-weight:900;font-size:14.5px;color:#5a2d0c;display:flex;align-items:center;gap:6px;">
+            <span>🎵</span>
+            <span>Epochen-Soundtrack:</span>
+            <span id="pause-music-track-info" style="font-weight:700;font-size:13px;color:#854d0e;">${escapeHtml(music.getCurrentTrackInfo()?.title || 'Urzeit-Melodie')} (${escapeHtml(music.getCurrentTrackInfo()?.epoch || 'Urzeit')})</span>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:#78350f;background:#fef3c7;padding:2px 8px;border-radius:99px;border:1px solid #fde68a;">
+            ${escapeHtml(music.getCurrentTrackInfo()?.epoch || 'Urzeit')}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fcf8ed;border:1.5px solid #ebd8ab;border-radius:8px;padding:8px 12px;">
+          <button class="retro-btn" id="pause-music-toggle-btn" style="min-width:115px;background:${music.isMutedState() ? '#78350f' : '#3b5e2b'};color:#fff;">
+            ${music.isMutedState() ? '🔇 Musik: Aus' : '🔊 Musik: An'}
+          </button>
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:180px;">
+            <span style="font-size:13px;font-weight:800;color:#5a2d0c;">Lautstärke:</span>
+            <input
+              id="pause-volume-slider"
+              type="range"
+              min="0"
+              max="100"
+              value="${Math.round(music.getVolume() * 100)}"
+              style="flex:1;cursor:pointer;accent-color:#b45309;"
+            />
+            <span id="pause-volume-label" style="font-size:12.5px;font-weight:900;color:#5a2d0c;min-width:38px;text-align:right;">
+              ${Math.round(music.getVolume() * 100)}%
+            </span>
+          </div>
+        </div>
+      </div>
+
       <div style="background:#fffdf7;border:1.5px solid #c29b61;border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <strong style="font-size:13.5px;color:#5a2d0c;">🧑 Figur & Rolle:</strong>
@@ -1602,6 +1683,40 @@ export class UIScene extends Phaser.Scene {
       navigator.clipboard?.writeText(shortCode);
       this.pushToast(`Hefter-Code kopiert: ${shortCode}`);
     });
+
+    const volSlider = this.modalBodyEl.querySelector<HTMLInputElement>('#pause-volume-slider');
+    const volLabel = this.modalBodyEl.querySelector<HTMLElement>('#pause-volume-label');
+    const musicToggleBtn = this.modalBodyEl.querySelector<HTMLElement>('#pause-music-toggle-btn');
+
+    if (volSlider && volLabel) {
+      volSlider.addEventListener('input', () => {
+        const val = Number(volSlider.value);
+        volLabel.textContent = `${val}%`;
+        music.setVolume(val / 100);
+        if (music.isMutedState() && val > 0) {
+          music.toggleMute();
+          if (musicToggleBtn) {
+            musicToggleBtn.textContent = '🔊 Musik: An';
+            musicToggleBtn.style.background = '#3b5e2b';
+          }
+        }
+        this.updateMusicUI();
+      });
+    }
+
+    if (musicToggleBtn) {
+      musicToggleBtn.addEventListener('click', () => {
+        const isMuted = music.toggleMute();
+        musicToggleBtn.textContent = isMuted ? '🔇 Musik: Aus' : '🔊 Musik: An';
+        musicToggleBtn.style.background = isMuted ? '#78350f' : '#3b5e2b';
+        if (volSlider && volLabel) {
+          volSlider.value = String(Math.round(music.getVolume() * 100));
+          volLabel.textContent = `${Math.round(music.getVolume() * 100)}%`;
+        }
+        this.updateMusicUI();
+        this.pushToast(isMuted ? '🔇 Musik stummgeschaltet' : '🎵 Musik an');
+      });
+    }
 
     const savePauseProfile = (gender: 'female' | 'male', role?: PlayerRole) => {
       const inp = this.modalBodyEl.querySelector('#pause-name-input') as HTMLInputElement;
