@@ -49,6 +49,7 @@ export class LonghouseScene extends Phaser.Scene {
   }
 
   create(): void {
+    state.hint = '';
     this.exiting = false;
     this.sleeping = false;
     this.nodes = [];
@@ -65,13 +66,6 @@ export class LonghouseScene extends Phaser.Scene {
     if (!existingLayer) document.body.appendChild(this.labelLayer);
     this.labelLayer.innerHTML = '';
     this.labelLayer.style.display = 'block';
-
-    // Interaktions-Pille im DOM
-    this.promptEl = document.createElement('div');
-    this.promptEl.id = 'longhouse-prompt';
-    this.promptEl.style.cssText =
-      'position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:rgba(26,18,8,0.92);border:2px solid #e8c170;color:#fef08a;font-weight:900;font-size:14px;padding:6px 18px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,0.5);display:none;pointer-events:none;z-index:30;text-shadow:0 1px 2px #000;';
-    this.labelLayer.appendChild(this.promptEl);
 
     // 2. Innenraum mit Holzkacheln, Stein-Herd und Möbeln rendern
     this.buildHouseMap();
@@ -359,11 +353,10 @@ export class LonghouseScene extends Phaser.Scene {
       }
     }
 
-    if (nearestNode && this.promptEl) {
-      this.promptEl.textContent = `[E: ${nearestNode.hint}]`;
-      this.promptEl.style.display = 'block';
-    } else if (this.promptEl) {
-      this.promptEl.style.display = 'none';
+    if (nearestNode) {
+      state.hint = `E: ${nearestNode.hint}`;
+    } else {
+      state.hint = '';
     }
 
     if (nearestNode) {
@@ -458,9 +451,10 @@ export class LonghouseScene extends Phaser.Scene {
       this.scene.wake('World');
       const worldScene = this.scene.get('World') as any;
       if (worldScene && worldScene.player) {
-        worldScene.player.setPosition(240, 205);
+        worldScene.player.setPosition(410, 270);
         worldScene.cameras.main.fadeIn(350, 0, 0, 0);
       }
+      state.hint = '';
       state.emit('toast', 'Du trittst aus dem Langhaus zurück ins Dorf.');
     });
   }

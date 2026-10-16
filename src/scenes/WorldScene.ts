@@ -874,8 +874,10 @@ export class WorldScene extends Phaser.Scene {
     let best: Node | null = null;
     let bestD = REACH;
     for (const n of this.nodes) {
-      const extraReach = n.kind === 'mine_entrance' ? 14 : 0;
-      const d = Phaser.Math.Distance.Between(fx, fy, n.sprite.x, n.sprite.y + (n.kind === 'ota' ? 8 : 4)) - extraReach;
+      const isLanghaus = n.kind === 'build_site' && n.buildingDef?.id === 'langhaus';
+      const extraReach = n.kind === 'mine_entrance' ? 18 : isLanghaus ? 26 : 0;
+      const targetY = isLanghaus ? n.sprite.y + 26 : n.sprite.y + (n.kind === 'ota' ? 8 : 4);
+      const d = Phaser.Math.Distance.Between(fx, fy, n.sprite.x, targetY) - extraReach;
       if (d < bestD) {
         best = n;
         bestD = d;
@@ -1320,6 +1322,7 @@ export class WorldScene extends Phaser.Scene {
 
   public enterCave(): void {
     state.modal = true;
+    state.hint = '';
     sfx.step();
     this.cameras.main.fadeOut(350, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
@@ -1331,6 +1334,7 @@ export class WorldScene extends Phaser.Scene {
 
   public enterLonghouse(): void {
     state.modal = true;
+    state.hint = '';
     sfx.door();
     this.cameras.main.fadeOut(350, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
