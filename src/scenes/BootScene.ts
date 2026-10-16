@@ -63,6 +63,8 @@ export class BootScene extends Phaser.Scene {
   create(): void {
     const params = new URLSearchParams(location.search);
     if (params.has('neu')) state.saves.clear();
+    state.hasHadExistingSaveOnBoot = state.saves.hasSave();
+    state.skipStartScreen = params.has('kapitel') || params.has('direkt');
 
     const ow = this.textures.get('overworld');
     for (const [name, [x, y, fw, fh]] of Object.entries(OVERWORLD_FRAMES)) ow.add(name, 0, x, y, fw, fh);
@@ -74,10 +76,24 @@ export class BootScene extends Phaser.Scene {
     for (const id of Object.keys(ITEMS)) this.textures.get(`icon-${id}`).setFilter(Phaser.Textures.FilterMode.LINEAR);
 
     this.createCustomSprites();
+    this.createFemaleCharacterSheet();
+    this.extractPreviewImages();
 
     const dirs = ['down', 'right', 'up', 'left'];
     dirs.forEach((dir, row) => {
       const start = row * 17;
+      // Male animations (and legacy fallback)
+      this.anims.create({
+        key: `walk-male-${dir}`,
+        frames: this.anims.generateFrameNumbers('player', { start, end: start + 3 }),
+        frameRate: 8,
+        repeat: -1,
+      });
+      this.anims.create({
+        key: `idle-male-${dir}`,
+        frames: [{ key: 'player', frame: start }],
+        frameRate: 1,
+      });
       this.anims.create({
         key: `walk-${dir}`,
         frames: this.anims.generateFrameNumbers('player', { start, end: start + 3 }),
@@ -87,6 +103,19 @@ export class BootScene extends Phaser.Scene {
       this.anims.create({
         key: `idle-${dir}`,
         frames: [{ key: 'player', frame: start }],
+        frameRate: 1,
+      });
+
+      // Female animations
+      this.anims.create({
+        key: `walk-female-${dir}`,
+        frames: this.anims.generateFrameNumbers('player_female', { start, end: start + 3 }),
+        frameRate: 8,
+        repeat: -1,
+      });
+      this.anims.create({
+        key: `idle-female-${dir}`,
+        frames: [{ key: 'player_female', frame: start }],
         frameRate: 1,
       });
     });
@@ -111,6 +140,102 @@ export class BootScene extends Phaser.Scene {
     }
 
     this.scene.start('World');
+  }
+
+  /**
+   * Erzeugt aus dem 16x32 Charakter-Spritesheet eine klar unterscheidbare weibliche Spielfigur
+   * (türkis-blaues Gewand, längere Haare/Zöpfe an den Seiten und goldenes Stirnband).
+   */
+  private createFemaleCharacterSheet(): void {
+    const srcImg = this.textures.get('player').getSourceImage() as HTMLImageElement;
+    const w = srcImg.width;
+    const h = srcImg.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(srcImg, 0, 0);
+
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const d = imgData.data;
+    // Rote Tunika-Pixel in ein warmes Beeren-/Türkis-Blau umfärben
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i];
+      const g = d[i + 1];
+      const b = d[i + 2];
+      const a = d[i + 3];
+      if (a > 128 && r > 130 && r > g * 1.45 && r > b * 1.45) {
+        // Rotton -> Blau/Türkis-Gewand mit gleicher Helligkeitsabstufung
+        d[i] = Math.min(255, Math.round(b * 0.9 + 25));
+        d[i + 1] = Math.min(255, Math.round(r * 0.68));
+        d[i + 2] = Math.min(255, Math.round(r * 1.05));
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Für die 4 Lauf-Reihen (down=0, right=1, up=2, left=3) je Frame lange Zöpfe & Stirnband ergänzen
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        const fx = col * 16;
+        const fy = row * 32;
+        // Goldenes Stirnband / Haarschmuck
+        ctx.fillStyle = '#f2c94c';
+        ctx.fillRect(fx + 5, fy + 9, 6, 1);
+        // Lange kastanienbraune Zöpfe über die Schultern
+        ctx.fillStyle = '#5a3420';
+        if (row === 0 || row === 2) {
+          ctx.fillRect(fx + 2, fy + 14, 2, 6);
+          ctx.fillRect(fx + 12, fy + 14, 2, 6);
+          ctx.fillStyle = '#f2c94c'; // kleine Haarperlen unten am Zopf
+          ctx.fillRect(fx + 2, fy + 19, 1, 1);
+          ctx.fillRect(fx + 13, fy + 19, 1, 1);
+        } else if (row === 1) {
+          // Rechtslaufend: Zopf links hinten
+          ctx.fillRect(fx + 2, fy + 13, 2, 7);
+          ctx.fillStyle = '#f2c94c';
+          ctx.fillRect(fx + 2, fy + 19, 1, 1);
+        } else if (row === 3) {
+          // Linkslaufend: Zopf rechts hinten
+          ctx.fillRect(fx + 12, fy + 13, 2, 7);
+          ctx.fillStyle = '#f2c94c';
+          ctx.fillRect(fx + 13, fy + 19, 1, 1);
+        }
+      }
+    }
+
+    this.textures.addSpriteSheet('player_female', canvas as unknown as HTMLImageElement, {
+      frameWidth: 16,
+      frameHeight: 32,
+    });
+  }
+
+  /** Extrahiert scharfe Data-URLs der Spielgrafiken für den Start- und Pausescreen. */
+  private extractPreviewImages(): void {
+    const cropToDataUrl = (texKey: string, sx: number, sy: number, sw: number, sh: number): string => {
+      const src = this.textures.get(texKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+      const c = document.createElement('canvas');
+      c.width = sw;
+      c.height = sh;
+      const ctx = c.getContext('2d')!;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+      return c.toDataURL();
+    };
+
+    state.malePreviewUrl = cropToDataUrl('player', 0, 6, 16, 26);
+    state.femalePreviewUrl = cropToDataUrl('player_female', 0, 6, 16, 26);
+
+    state.showcaseSprites = {
+      fire: cropToDataUrl('objects', 64, 48, 16, 16),
+      wolf: cropToDataUrl('wolf', 0, 0, 20, 16),
+      kiln: cropToDataUrl('kiln', 0, 0, 32, 32),
+      loom: cropToDataUrl('loom', 0, 0, 32, 32),
+      smelter: cropToDataUrl('smelter', 0, 0, 36, 36),
+      forge: cropToDataUrl('forge', 0, 0, 40, 36),
+      langhaus: cropToDataUrl('overworld', 96, 0, 80, 80),
+      market: cropToDataUrl('overworld', 288, 368, 96, 80),
+      goat: cropToDataUrl('goat', 24, 24, 36, 36),
+    };
   }
 
   /** Erzeugt saubere 16-Bit-Pixel-Sprites für Falle, Wolf/Hund, Lehmhaufen, Öfen, Webstuhl und Erzadern. */

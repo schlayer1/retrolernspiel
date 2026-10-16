@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { sfx } from '../audio/sound';
 import { CHAPTERS, DialogNode, LEXICON } from '../data/chapter1';
 import { BuildingDef, BuildingId, ItemId, Recipe, TradeOffer } from '../data/items';
-import { FarmPlotState, Placed, SaveData, SaveManager } from './SaveManager';
+import { FarmPlotState, Placed, PlayerGender, SaveData, SaveManager } from './SaveManager';
 
 export const DAY_MS = 240_000; // Dauer eines Tages in Echtzeit
 export const TRAP_MS = 20_000; // Zeit, bis eine Falle etwas gefangen hat
@@ -15,10 +15,11 @@ export interface DialogSpec {
 }
 
 /**
- * Zentraler Spielzustand, geteilt zwischen WorldScene (Spielwelt) und UIScene (Oberfläche).
- */
+  * Zentraler Spielzustand, geteilt zwischen WorldScene (Spielwelt) und UIScene (Oberfläche).
+  */
 class GameState extends Phaser.Events.EventEmitter {
   playerName = 'Sippenkind';
+  playerGender: PlayerGender = 'female';
   chapter = 1;
   inventory: Partial<Record<ItemId, number>> = {};
   food = 85;
@@ -43,10 +44,20 @@ class GameState extends Phaser.Events.EventEmitter {
   dayTime = 0.08;
   collapses = 0;
   quizAttempts = 0;
+  playTimeSec = 0;
+  distanceMeters = 0;
+  daysSurvived = 1;
   playerX?: number;
   playerY?: number;
 
-  /** true, solange Dialog, Bau- oder Lexikonfenster offen sind (Spielfigur steht still). */
+  /** Data-URLs für Start- und Pausescreen-Vorschau */
+  malePreviewUrl = '';
+  femalePreviewUrl = '';
+  showcaseSprites: Record<string, string> = {};
+  hasHadExistingSaveOnBoot = false;
+  skipStartScreen = false;
+
+  /** true, solange Dialog, Bau-, Start-, Pause- oder Lexikonfenster offen sind (Spielfigur & Spielzeit stehen still). */
   modal = false;
   lastModalClose = 0;
   hint = '';
@@ -328,30 +339,109 @@ class GameState extends Phaser.Events.EventEmitter {
     return 'Du hast nichts zu essen.';
   }
 
-  /** Erzeugt einen kompakten Speichercode für das Schulheft. */
-  exportCode(): string {
-    const compact = {
-      n: this.playerName,
-      c: this.chapter,
-      q: this.quest,
-      b: this.buildings,
-      l: this.lexicon,
-      i: this.inventory,
-      w: this.wolfTamed ? 1 : 0,
-      g: this.goatsTamed,
-    };
-    const json = JSON.stringify(compact);
-    return 'SZ3-' + btoa(unescape(encodeURIComponent(json)));
+  setProfile(name: string, gender: PlayerGender): void {
+    const clean = name.trim();
+    if (clean) this.playerName = clean.slice(0, 22);
+    this.playerGender = gender === 'male' ? 'male' : 'female';
+    this.emit('profileChanged');
+    this.persist();
   }
 
-  /** Lädt einen kompakten Speichercode aus dem Schulheft. */
+  roleTitle(): string {
+    return this.playerGender === 'female' ? 'Von der Jägerin zur Schmiedin' : 'Vom Jäger zum Schmied';
+  }
+
+  adventurerTitle(): string {
+    return this.playerGender === 'female' ? 'Entdeckerin' : 'Entdecker';
+  }
+
+  epochRankTitle(): string {
+    const f = this.playerGender === 'female';
+    switch (this.chapter) {
+      case 1:
+        return f ? 'Jägerin & Sammlerin der Altsteinzeit' : 'Jäger & Sammler der Altsteinzeit';
+      case 2:
+        return f ? 'Erste Ackerbäuerin am See' : 'Erster Ackerbauer am See';
+      case 3:
+        return f ? 'Baumeisterin der Jungsteinzeit' : 'Baumeister der Jungsteinzeit';
+      case 4:
+        return f ? 'Weberin & Fernhändlerin' : 'Weber & Fernhändler';
+      case 5:
+        return f ? 'Kupferschmelzerin der Ötzi-Zeit' : 'Kupferschmelzer der Ötzi-Zeit';
+      default:
+        return f ? 'Meisterschmiedin der Eisenzeit' : 'Meisterschmied der Eisenzeit';
+    }
+  }
+
+  formatPlayTime(): string {
+    const total = Math.max(0, Math.floor(this.playTimeSec));
+    const hrs = Math.floor(total / 3600);
+    const mins = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    if (hrs > 0) return `${hrs} Std. ${mins} Min.`;
+    return `${mins} Min. ${secs.toString().padStart(2, '0')} Sek.`;
+  }
+
+  totalItemsCollected(): number {
+    const invSum = Object.values(this.inventory).reduce((a, b) => a + (b ?? 0), 0);
+    const countSum = Object.values(this.counts).reduce((a, b) => a + (b ?? 0), 0);
+    return Math.max(invSum, countSum);
+  }
+
+  /**
+   * Erzeugt einen kinderleicht abschreibbaren Kurz-Code für den Geschichtshefter
+   * (ohne Datenbank, 100 % datenschutzfrei): z. B. "MIA-W-K3-Q4-12M".
+   */
+  exportCode(): string {
+    const cleanName = (this.playerName || 'KIND')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-ZÄÖÜ0-9]/g, '')
+      .slice(0, 10) || 'KIND';
+    const g = this.playerGender === 'male' ? 'M' : 'W';
+    const mins = Math.max(1, Math.round(this.playTimeSec / 60));
+    return `${cleanName}-${g}-K${this.chapter}-Q${this.quest}-${mins}M`;
+  }
+
+  /**
+   * Lädt sowohl den kinderleichten Kurz-Code (z. B. "MIA-W-K3-Q4-12M" oder "LEO-M-K5-Q2")
+   * als auch ältere SZ3-Codes aus dem Geschichtshefter.
+   */
   importCode(raw: string): boolean {
+    const trimmed = raw.trim();
+    if (!trimmed) return false;
+
+    // 1. Prüfung auf Kurz-Code: NAME-W/M-K3-Q4(-12M)
+    const shortMatch = trimmed.match(/^([A-Za-zÄÖÜäöüß0-9_]{1,16})\s*-\s*([WwMmFf])\s*-\s*[Kk]?([1-6])(?:\s*-\s*[QqAa]?([0-8]))?(?:\s*-\s*(\d+)[Mm]?)?$/);
+    if (shortMatch) {
+      const rawName = shortMatch[1];
+      const formattedName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
+      const gChar = shortMatch[2].toUpperCase();
+      const ch = Math.max(1, Math.min(6, Number(shortMatch[3]) || 1));
+      const q = Math.max(0, Math.min(8, Number(shortMatch[4] ?? 0)));
+      const mins = Number(shortMatch[5] ?? 5);
+
+      this.playerName = formattedName;
+      this.playerGender = gChar === 'M' ? 'male' : 'female';
+      this.playTimeSec = Math.max(this.playTimeSec, mins * 60);
+      this.startChapter(ch);
+      this.applyQuestProgressForChapter(ch, q);
+      this.emit('profileChanged');
+      this.emit('chapterChanged', this.chapter);
+      this.emit('inventory');
+      this.emit('quest');
+      this.persist();
+      return true;
+    }
+
+    // 2. Fallback: Langer Base64-Code (SZ3-...)
     try {
-      const cleaned = raw.trim().replace(/^SZ3-/, '');
+      const cleaned = trimmed.replace(/^SZ3-/, '');
       const json = decodeURIComponent(escape(atob(cleaned)));
       const d = JSON.parse(json);
       if (!d || typeof d.c !== 'number') return false;
       this.playerName = typeof d.n === 'string' && d.n.trim() ? d.n.trim() : 'Sippenkind';
+      if (d.gnd === 'male' || d.gnd === 'female') this.playerGender = d.gnd;
       this.chapter = Math.max(1, Math.min(6, d.c));
       this.quest = d.q ?? 0;
       this.buildings = Array.isArray(d.b) ? d.b : [];
@@ -359,7 +449,8 @@ class GameState extends Phaser.Events.EventEmitter {
       this.inventory = d.i && typeof d.i === 'object' ? d.i : {};
       this.wolfTamed = Boolean(d.w);
       this.goatsTamed = Number(d.g) || 0;
-      this.knowledge = Math.min(100, this.lexicon.length * 5);
+      this.knowledge = Math.min(100, Math.round((this.lexicon.length / Object.keys(LEXICON).length) * 100));
+      this.emit('profileChanged');
       this.emit('chapterChanged', this.chapter);
       this.emit('inventory');
       this.emit('quest');
@@ -370,10 +461,126 @@ class GameState extends Phaser.Events.EventEmitter {
     }
   }
 
+  /** Stellt bei Kurz-Code-Import auch den Zwischenfortschritt innerhalb eines Kapitels sauber her. */
+  private applyQuestProgressForChapter(ch: number, targetQuest: number): void {
+    this.quest = targetQuest;
+    if (ch === 1) {
+      if (targetQuest >= 2) this.counts.beere = 5;
+      if (targetQuest >= 3) {
+        this.counts.fire = 1;
+        if (this.fires.length === 0) this.fires.push({ x: 418, y: 296, t: Date.now() });
+        this.unlockSilent(['feuer']);
+      }
+      if (targetQuest >= 4) this.counts.trap = 1;
+      if (targetQuest >= 5) this.counts.meat = 1;
+      if (targetQuest >= 6) {
+        this.counts.cooked = 1;
+        this.unlockSilent(['braten']);
+      }
+      if (targetQuest >= 7) {
+        this.counts.faustkeil = 1;
+        this.inventory.faustkeil = Math.max(1, this.count('faustkeil'));
+        this.unlockSilent(['faustkeil']);
+      }
+    } else if (ch === 2) {
+      if (targetQuest >= 2) {
+        this.wolfTamed = true;
+        this.unlockSilent(['wolf']);
+      }
+      if (targetQuest >= 3) this.counts.samen = 3;
+      if (targetQuest >= 4) this.inventory.hacke = Math.max(1, this.count('hacke'));
+      if (targetQuest >= 5) {
+        this.inventory.tontopf = Math.max(1, this.count('tontopf'));
+        this.unlockSilent(['keramik']);
+      }
+      if (targetQuest >= 6) this.counts.watered_plot = 1;
+      if (targetQuest >= 7) {
+        this.counts.harvested_wheat = 1;
+        this.inventory.getreide = Math.max(2, this.count('getreide'));
+        this.unlockSilent(['ackerbau']);
+      }
+    } else if (ch === 3) {
+      if (targetQuest >= 2) this.ensureBuilding('toepferofen');
+      if (targetQuest >= 3) this.ensureBuilding('gehege');
+      if (targetQuest >= 4) {
+        this.goatsTamed = Math.max(1, this.goatsTamed);
+        this.unlockSilent(['domestizierung']);
+      }
+      if (targetQuest >= 5) this.counts.goat_product = 1;
+      if (targetQuest >= 6) {
+        this.ensureBuilding('speicher');
+        this.counts.brot = 1;
+      }
+      if (targetQuest >= 7) {
+        this.ensureBuilding('langhaus');
+        this.unlockSilent(['langhaus', 'arbeitsteilung']);
+      }
+    } else if (ch === 4) {
+      if (targetQuest >= 2) {
+        this.ensureBuilding('webstuhl');
+        this.unlockSilent(['weben']);
+      }
+      if (targetQuest >= 3) this.inventory.wolle = Math.max(2, this.count('wolle'));
+      if (targetQuest >= 4) {
+        this.counts.stoff = 1;
+        this.inventory.stoff = Math.max(1, this.count('stoff'));
+      }
+      if (targetQuest >= 5) {
+        this.counts.trade_salz = 1;
+        this.inventory.salz = Math.max(1, this.count('salz'));
+        this.unlockSilent(['tauschhandel', 'salz']);
+      }
+      if (targetQuest >= 6) {
+        this.counts.trade_bernstein = 1;
+        this.inventory.bernstein = Math.max(1, this.count('bernstein'));
+        this.unlockSilent(['bernstein']);
+      }
+    } else if (ch === 5) {
+      if (targetQuest >= 2) this.inventory.spitzhacke = Math.max(1, this.count('spitzhacke'));
+      if (targetQuest >= 3) this.ensureBuilding('schmelzofen');
+      if (targetQuest >= 4) {
+        this.counts.mined_kupfer = 2;
+        this.unlockSilent(['bergbau']);
+      }
+      if (targetQuest >= 5) {
+        this.counts.kupfer = 1;
+        this.inventory.kupfer = Math.max(1, this.count('kupfer'));
+        this.unlockSilent(['kupfer']);
+      }
+      if (targetQuest >= 6) {
+        this.counts.kupferbeil = 1;
+        this.inventory.kupferbeil = Math.max(1, this.count('kupferbeil'));
+        this.unlockSilent(['oetzi']);
+      }
+    } else if (ch === 6) {
+      if (targetQuest >= 2) {
+        this.counts.trade_zinn = 1;
+        this.inventory.zinn = Math.max(1, this.count('zinn'));
+        this.unlockSilent(['zinn']);
+      }
+      if (targetQuest >= 3) {
+        this.counts.bronzeschwert = 1;
+        this.inventory.bronzeschwert = Math.max(1, this.count('bronzeschwert'));
+        this.unlockSilent(['bronze']);
+      }
+      if (targetQuest >= 4) this.ensureBuilding('schmiede');
+      if (targetQuest >= 5) {
+        this.counts.eisen = 1;
+        this.inventory.eisen = Math.max(1, this.count('eisen'));
+        this.unlockSilent(['eisen']);
+      }
+      if (targetQuest >= 6) {
+        this.counts.eisenwerkzeug = 1;
+        this.inventory.eisenwerkzeug = Math.max(1, this.count('eisenwerkzeug'));
+      }
+    }
+  }
+
   toSave(): SaveData {
     return {
       version: 3,
       playerName: this.playerName,
+      playerGender: this.playerGender,
       chapter: this.chapter,
       x: this.playerX ?? 0,
       y: this.playerY ?? 0,
@@ -393,11 +600,15 @@ class GameState extends Phaser.Events.EventEmitter {
       dayTime: this.dayTime,
       collapses: this.collapses,
       quizAttempts: this.quizAttempts,
+      playTimeSec: Math.round(this.playTimeSec),
+      distanceMeters: Math.round(this.distanceMeters),
+      daysSurvived: this.daysSurvived,
     };
   }
 
   loadFrom(d: SaveData): void {
     this.playerName = d.playerName || 'Sippenkind';
+    this.playerGender = d.playerGender === 'male' ? 'male' : 'female';
     this.chapter = d.chapter ?? 1;
     this.inventory = { ...d.inventory } as Partial<Record<ItemId, number>>;
     this.lexicon = [...d.lexicon];
@@ -415,6 +626,9 @@ class GameState extends Phaser.Events.EventEmitter {
     this.dayTime = d.dayTime;
     this.collapses = d.collapses;
     this.quizAttempts = d.quizAttempts;
+    this.playTimeSec = d.playTimeSec ?? 0;
+    this.distanceMeters = d.distanceMeters ?? 0;
+    this.daysSurvived = d.daysSurvived ?? 1;
     this.playerX = d.x;
     this.playerY = d.y;
   }

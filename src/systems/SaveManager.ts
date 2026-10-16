@@ -15,9 +15,12 @@ export interface FarmPlotState {
   wateredAt: number;
 }
 
+export type PlayerGender = 'female' | 'male';
+
 export interface SaveData {
   version: 3;
   playerName: string;
+  playerGender?: PlayerGender;
   chapter: number;
   x: number;
   y: number;
@@ -37,6 +40,9 @@ export interface SaveData {
   dayTime: number;
   collapses: number;
   quizAttempts: number;
+  playTimeSec?: number;
+  distanceMeters?: number;
+  daysSurvived?: number;
 }
 
 /** Austauschbares Speicher-Backend. */
@@ -66,6 +72,9 @@ export class LocalStorageBackend implements SaveBackend {
 export class SaveManager {
   constructor(private backend: SaveBackend = new LocalStorageBackend(), private key = 'steinzeit-save-v3') {}
 
+  hasSave(): boolean {
+    return this.load() !== null;
+  }
   load(): SaveData | null {
     const d = this.backend.load(this.key);
     return d && d.version === 3 ? d : null;

@@ -71,6 +71,7 @@ export class WorldScene extends Phaser.Scene {
   private saveTimer = 0;
   private sleeping = false;
   private wolfNode?: Node;
+  private playerLabel?: DomLabel;
 
   constructor() {
     super('World');
@@ -102,11 +103,13 @@ export class WorldScene extends Phaser.Scene {
 
     const startX = state.playerX || (MAP_W * TILE) / 2;
     const startY = state.playerY || (MAP_H * TILE) / 2 + 20;
-    this.player = this.physics.add.sprite(startX, startY, 'player', 0);
+    const texKey = state.playerGender === 'female' ? 'player_female' : 'player';
+    this.player = this.physics.add.sprite(startX, startY, texKey, 0);
     this.player.body!.setSize(8, 6).setOffset(4, 20);
     this.player.setCollideWorldBounds(true);
     this.physics.world.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
     this.physics.add.collider(this.player, this.obstacles);
+    this.playerLabel = this.addLabel(startX, startY - 22, state.playerName, '#a8e6ff');
 
     this.cameras.main.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
     this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
@@ -124,14 +127,21 @@ export class WorldScene extends Phaser.Scene {
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
     state.on('craft', this.onCraft, this);
     state.on('chapterChanged', this.onChapterChanged, this);
+    state.on('profileChanged', this.onProfileChanged, this);
     this.events.once('shutdown', () => {
       state.off('craft', this.onCraft, this);
       state.off('chapterChanged', this.onChapterChanged, this);
+      state.off('profileChanged', this.onProfileChanged, this);
     });
     window.addEventListener('beforeunload', () => this.persist());
+  }
 
-    if (!saved) {
-      this.time.delayedCall(600, () => state.emit('toast', 'Willkommen! Geh zu Ota (E zum Sprechen).'));
+  private onProfileChanged(): void {
+    if (this.player) {
+      this.player.anims.play(`idle-${state.playerGender}-${this.facing}`, true);
+    }
+    if (this.playerLabel) {
+      this.playerLabel.el.textContent = state.playerName;
     }
   }
 
@@ -500,11 +510,16 @@ export class WorldScene extends Phaser.Scene {
 
   update(_t: number, delta: number): void {
     this.updateTime(delta);
+    if (this.playerLabel && this.player) {
+      this.playerLabel.x = this.player.x;
+      this.playerLabel.y = this.player.y - 22;
+      this.playerLabel.el.textContent = state.playerName;
+    }
     this.syncWorldLabels();
 
     if (state.modal || this.sleeping) {
       this.player.setVelocity(0, 0);
-      this.player.anims.play(`idle-${this.facing}`, true);
+      this.player.anims.play(`idle-${state.playerGender}-${this.facing}`, true);
       return;
     }
 
@@ -525,9 +540,10 @@ export class WorldScene extends Phaser.Scene {
 
     if (v.length() > 0.01) {
       this.facing = Math.abs(v.x) > Math.abs(v.y) ? (v.x > 0 ? 'right' : 'left') : v.y > 0 ? 'down' : 'up';
-      this.player.anims.play(`walk-${this.facing}`, true);
+      this.player.anims.play(`walk-${state.playerGender}-${this.facing}`, true);
+      state.distanceMeters += (v.length() * SPEED * (delta / 1000)) / 12;
     } else {
-      this.player.anims.play(`idle-${this.facing}`, true);
+      this.player.anims.play(`idle-${state.playerGender}-${this.facing}`, true);
     }
     this.player.setDepth(this.player.y + 12);
 
@@ -748,7 +764,10 @@ export class WorldScene extends Phaser.Scene {
   private updateTime(delta: number): void {
     const dt = delta / 1000;
     if (!state.modal && !this.sleeping) {
-      state.dayTime = (state.dayTime + delta / DAY_MS) % 1;
+      state.playTimeSec += dt;
+      const nextDayTime = state.dayTime + delta / DAY_MS;
+      if (nextDayTime >= 1) state.daysSurvived++;
+      state.dayTime = nextDayTime % 1;
       state.food = Math.max(0, state.food - dt * 0.3);
       const night = this.nightness();
       const safeBonus = (state.wolfTamed ? 0.35 : 0) + (state.hasBuilding('langhaus') ? 0.5 : 0);
@@ -1228,6 +1247,7 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.fadeOut(650, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       state.dayTime = 0.05;
+      state.daysSurvived++;
       state.safety = Math.min(100, state.safety + 35);
       // Gegossene Felder reifen über Nacht garantiert heran
       state.plots.forEach((p) => {

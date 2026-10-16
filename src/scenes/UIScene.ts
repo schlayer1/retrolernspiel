@@ -39,12 +39,24 @@ function stopSpeech(): void {
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
 
-type ActivePanel = 'none' | 'craft' | 'trade' | 'lexicon' | 'timeline' | 'chapter' | 'cert' | 'done' | 'milestone';
+type ActivePanel =
+  | 'none'
+  | 'start'
+  | 'pause'
+  | 'craft'
+  | 'trade'
+  | 'lexicon'
+  | 'timeline'
+  | 'chapter'
+  | 'cert'
+  | 'done'
+  | 'milestone';
 
 /**
  * Gestochen scharfe HTML/CSS-Oberfläche über der 16-Bit-Spielwelt:
- * HUD mit Ziel-Kompass, Hotbar, Dialoge mit Vorlese-Funktion, Entdecker-Karten,
- * Handwerk, Tauschhandel, illustriertes Lexikon, Epochen-Vergleichstabelle & Urkunde.
+ * Startscreen mit Spielgrafik-Vorschau & Charakterwahl (Mann/Frau + Name),
+ * Pausescreen mit Spielzeit & Abenteuer-Statistiken, HUD mit Ziel-Kompass,
+ * Dialoge mit Vorlese-Funktion, Entdecker-Karten, Lexikon, Zeitstrahl & Urkunde.
  */
 export class UIScene extends Phaser.Scene {
   private root!: HTMLElement;
@@ -75,6 +87,7 @@ export class UIScene extends Phaser.Scene {
   private activePanel: ActivePanel = 'none';
   private lexSelected = 'sippe';
   private milestoneQueue: string[] = [];
+  private startSelectedChapter = 1;
 
   private toastQueue: string[] = [];
   private toastBusy = false;
@@ -89,6 +102,11 @@ export class UIScene extends Phaser.Scene {
     super('UI');
   }
 
+  private isTyping(): boolean {
+    const el = document.activeElement;
+    return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT'));
+  }
+
   create(): void {
     state.touch = new TouchControls(this) as unknown as typeof state.touch;
     this.mountDOM();
@@ -101,6 +119,13 @@ export class UIScene extends Phaser.Scene {
     state.on('openCertificate', this.openCertificateModal, this);
     state.on('milestone', this.enqueueMilestone, this);
 
+    const onVisChange = () => {
+      if (document.hidden && !state.modal && this.activePanel === 'none' && !this.dialogEl.classList.contains('open')) {
+        this.togglePanel('pause');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+
     this.events.once('shutdown', () => {
       state.off('inventory', this.refreshHotbar, this);
       state.off('toast', this.pushToast, this);
@@ -109,32 +134,47 @@ export class UIScene extends Phaser.Scene {
       state.off('openTrade', this.openTradeModal, this);
       state.off('openCertificate', this.openCertificateModal, this);
       state.off('milestone', this.enqueueMilestone, this);
+      document.removeEventListener('visibilitychange', onVisChange);
     });
 
     const kb = this.input.keyboard!;
-    kb.on('keydown-C', () => this.togglePanel('craft'));
-    kb.on('keydown-H', () => this.togglePanel('trade'));
-    kb.on('keydown-L', () => this.togglePanel('lexicon'));
-    kb.on('keydown-Z', () => this.togglePanel('timeline'));
-    kb.on('keydown-K', () => this.togglePanel('chapter'));
-    kb.on('keydown-U', () => this.togglePanel('cert'));
-    kb.on('keydown-F', () => !state.modal && this.pushToast(state.eat()));
-    kb.on('keydown-ESC', () => this.closePanels());
+    kb.disableGlobalCapture();
+    kb.on('keydown-P', () => !this.isTyping() && this.togglePanel('pause'));
+    kb.on('keydown-C', () => !this.isTyping() && this.togglePanel('craft'));
+    kb.on('keydown-H', () => !this.isTyping() && this.togglePanel('trade'));
+    kb.on('keydown-L', () => !this.isTyping() && this.togglePanel('lexicon'));
+    kb.on('keydown-Z', () => !this.isTyping() && this.togglePanel('timeline'));
+    kb.on('keydown-K', () => !this.isTyping() && this.togglePanel('chapter'));
+    kb.on('keydown-U', () => !this.isTyping() && this.togglePanel('cert'));
+    kb.on('keydown-F', () => !this.isTyping() && !state.modal && this.pushToast(state.eat()));
+    kb.on('keydown-ESC', () => {
+      if (this.isTyping()) {
+        (document.activeElement as HTMLElement)?.blur();
+        return;
+      }
+      if (this.activePanel === 'start') return;
+      if (this.activePanel !== 'none') this.closePanels();
+      else if (!this.dialogEl.classList.contains('open')) this.togglePanel('pause');
+    });
     for (const k of ['E', 'SPACE', 'ENTER']) {
       kb.on(`keydown-${k}`, () => {
+        if (this.isTyping()) return;
         if (this.dialogEl.classList.contains('open')) this.advanceDialog();
         else if (this.activePanel === 'milestone') this.closePanels();
         else if (this.activePanel === 'done') this.finishChapterDone();
       });
     }
     ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'].forEach((k, i) =>
-      kb.on(`keydown-${k}`, () => this.numberKey(i)),
+      kb.on(`keydown-${k}`, () => !this.isTyping() && this.numberKey(i)),
     );
 
     this.refreshHotbar();
     const pParam = new URLSearchParams(location.search).get('panel') as ActivePanel | null;
-    if (pParam && ['craft', 'trade', 'lexicon', 'timeline', 'chapter', 'cert'].includes(pParam)) {
+    if (pParam && ['start', 'pause', 'craft', 'trade', 'lexicon', 'timeline', 'chapter', 'cert'].includes(pParam)) {
       this.togglePanel(pParam);
+    } else if (!state.skipStartScreen) {
+      this.startSelectedChapter = state.chapter || 1;
+      this.togglePanel('start');
     }
   }
 
@@ -171,6 +211,7 @@ export class UIScene extends Phaser.Scene {
             </div>
           </div>
           <div class="hud-btn-row">
+            <button class="retro-btn" data-act="pause" style="border-color:#fbbf24;"><span class="key-badge">P</span> ⏸ Pause</button>
             <button class="retro-btn" data-act="craft"><span class="key-badge">C</span> Handwerk</button>
             <button class="retro-btn" data-act="trade"><span class="key-badge">H</span> Handel</button>
             <button class="retro-btn" data-act="lexicon"><span class="key-badge">L</span> Lexikon</button>
@@ -260,7 +301,7 @@ export class UIScene extends Phaser.Scene {
       else this.closePanels();
     });
     this.backdropEl.addEventListener('click', (e) => {
-      if (e.target === this.backdropEl) {
+      if (e.target === this.backdropEl && this.activePanel !== 'start') {
         if (this.activePanel === 'done') this.finishChapterDone();
         else this.closePanels();
       }
@@ -376,7 +417,11 @@ export class UIScene extends Phaser.Scene {
 
   private renderActivePanel(): void {
     this.modalFooterEl.innerHTML = '';
-    if (this.activePanel === 'craft') this.renderCraft();
+    const closeBtn = this.root.querySelector('#modal-close-btn') as HTMLElement | null;
+    if (closeBtn) closeBtn.style.display = this.activePanel === 'start' ? 'none' : 'inline-flex';
+    if (this.activePanel === 'start') this.renderStartModal();
+    else if (this.activePanel === 'pause') this.renderPauseModal();
+    else if (this.activePanel === 'craft') this.renderCraft();
     else if (this.activePanel === 'trade') this.renderTrade();
     else if (this.activePanel === 'lexicon') this.renderLexicon();
     else if (this.activePanel === 'timeline') this.renderTimeline();
@@ -800,6 +845,395 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  // ------------------------------------------------------------ Startscreen (Charakterwahl, Grafik-Showcase & Wiedereinstieg)
+
+  private renderStartModal(): void {
+    this.modalCardEl.className = 'modal-card';
+    this.modalTitleEl.textContent = '🏕️ Willkommen in der Urgeschichte! (Klasse 5/6)';
+
+    const currentAvatar = state.playerGender === 'female' ? state.femalePreviewUrl : state.malePreviewUrl;
+    const savedMeta = CHAPTERS[state.chapter] ?? CHAPTERS[1];
+    const savedQuest = savedMeta.quests[Math.min(state.quest, savedMeta.quests.length - 1)];
+
+    const resumeHtml = state.hasHadExistingSaveOnBoot
+      ? `
+        <div style="background:linear-gradient(135deg,#1d3b1a 0%,#2b5324 100%);border:2.5px solid #86efac;border-radius:10px;padding:12px 16px;color:#fff;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div class="gender-avatar-box" style="border-color:#86efac;">
+              <img src="${currentAvatar}" alt="Spielfigur" />
+            </div>
+            <div>
+              <div style="font-size:11.5px;font-weight:800;color:#bbf7d0;text-transform:uppercase;">
+                ✓ Gespeicherter Spielstand auf diesem Gerät gefunden
+              </div>
+              <div style="font-size:18px;font-weight:900;color:#fff;">
+                ${escapeHtml(state.playerName)} · ${escapeHtml(state.epochRankTitle())}
+              </div>
+              <div style="font-size:13px;color:#dcfce7;">
+                ${escapeHtml(savedMeta.title)} · Aufgabe: ${escapeHtml(savedQuest)} · ⏱ ${escapeHtml(state.formatPlayTime())}
+              </div>
+            </div>
+          </div>
+          <button class="retro-btn" id="start-resume-btn" style="background:#22c55e;color:#052e16;border-color:#bbf7d0;font-size:15px;padding:10px 18px;">
+            ▶️ Direkt weiterspielen!
+          </button>
+        </div>
+      `
+      : '';
+
+    const chPills = [1, 2, 3, 4, 5, 6]
+      .map((ch) => {
+        const active = this.startSelectedChapter === ch;
+        return `
+          <button class="retro-btn" data-start-ch="${ch}" style="background:${active ? '#b45309' : '#3a2410'};border-color:${active ? '#fde68a' : '#8b5a2b'};padding:6px 10px;">
+            <span class="key-badge">${ch}</span> ${escapeHtml(CHAPTERS[ch].title.replace(/^Kapitel \d+:\s*/, ''))}
+          </button>
+        `;
+      })
+      .join('');
+
+    this.modalBodyEl.innerHTML = `
+      <div class="start-hero">
+        <div class="start-hero-title">🔥 VOM JÄGER ZUM SCHMIED · VON DER JÄGERIN ZUR SCHMIEDIN</div>
+        <div class="start-hero-sub">
+          Erlebe in 6 Kapiteln, wie die Menschen der Urzeit überlebten, Wölfe zähmten, die ersten Dörfer bauten und schließlich Bronze und Eisen schmiedeten!
+        </div>
+        <div class="showcase-strip">
+          <div class="showcase-card">
+            <img src="${state.showcaseSprites.fire || 'assets/icons/faustkeil.png'}" alt="Altsteinzeit" />
+            <div class="showcase-era">Kap. 1 · Altsteinzeit</div>
+            <div class="showcase-caption">Lagerfeuer, Jagdfallen & Faustkeil</div>
+          </div>
+          <div class="showcase-card">
+            <img src="${state.showcaseSprites.wolf || 'assets/icons/sichel.png'}" alt="Übergang" />
+            <div class="showcase-era">Kap. 2 · Übergang</div>
+            <div class="showcase-caption">Wolf Lupo zähmen & erster Ackerbau</div>
+          </div>
+          <div class="showcase-card">
+            <img src="${state.showcaseSprites.langhaus || 'assets/icons/brot.png'}" alt="Jungsteinzeit" />
+            <div class="showcase-era">Kap. 3 · Siedlung</div>
+            <div class="showcase-caption">Langhaus, Ziegen & Töpferofen</div>
+          </div>
+          <div class="showcase-card">
+            <img src="${state.showcaseSprites.loom || 'assets/icons/bernstein.png'}" alt="Handel" />
+            <div class="showcase-era">Kap. 4 · Handel</div>
+            <div class="showcase-caption">Webstuhl, Salz & Ostsee-Bernstein</div>
+          </div>
+          <div class="showcase-card">
+            <img src="${state.showcaseSprites.smelter || 'assets/icons/kupferbeil.png'}" alt="Kupferzeit" />
+            <div class="showcase-era">Kap. 5 · Kupferzeit</div>
+            <div class="showcase-caption">Bergbau, Schmelzofen & Ötzi-Beil</div>
+          </div>
+          <div class="showcase-card">
+            <img src="${state.showcaseSprites.forge || 'assets/icons/bronzeschwert.png'}" alt="Eisenzeit" />
+            <div class="showcase-era">Kap. 6 · Metallzeit</div>
+            <div class="showcase-caption">Bronzeguss & glühende Eisenschmiede</div>
+          </div>
+        </div>
+      </div>
+
+      ${resumeHtml}
+
+      <div style="background:#fffdf7;border:2px solid #c29b61;border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+        <div style="font-weight:900;font-size:15.5px;color:#5a2d0c;margin-bottom:6px;">
+          1. Wähle deine Spielfigur (Jägerin oder Jäger):
+        </div>
+        <div class="gender-grid">
+          <button type="button" class="gender-card ${state.playerGender === 'female' ? 'active' : ''}" data-pick-gender="female">
+            <div class="gender-avatar-box">
+              <img src="${state.femalePreviewUrl}" alt="Jägerin / Schmiedin" />
+            </div>
+            <div>
+              <div style="font-size:16px;font-weight:900;color:#5a2d0c;">👧 Frau / Entdeckerin</div>
+              <div style="font-size:13px;font-weight:700;color:#b45309;">„Von der Jägerin zur Schmiedin“</div>
+              <div style="font-size:12px;color:#6b533b;margin-top:2px;">Blaue Tunika, lange Zöpfe & Stirnband</div>
+            </div>
+          </button>
+
+          <button type="button" class="gender-card ${state.playerGender === 'male' ? 'active' : ''}" data-pick-gender="male">
+            <div class="gender-avatar-box">
+              <img src="${state.malePreviewUrl}" alt="Jäger / Schmied" />
+            </div>
+            <div>
+              <div style="font-size:16px;font-weight:900;color:#5a2d0c;">👦 Mann / Entdecker</div>
+              <div style="font-size:13px;font-weight:700;color:#b45309;">„Vom Jäger zum Schmied“</div>
+              <div style="font-size:12px;color:#6b533b;margin-top:2px;">Rotes Gewand & kurzer Haarschnitt</div>
+            </div>
+          </button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px;align-items:end;">
+          <div>
+            <label for="start-name-input" style="display:block;font-weight:900;font-size:14.5px;color:#5a2d0c;margin-bottom:4px;">
+              2. Wie heißt du? (Dein Vorname im Spiel & auf der Urkunde):
+            </label>
+            <input
+              id="start-name-input"
+              type="text"
+              maxlength="20"
+              value="${escapeHtml(state.playerName === 'Sippenkind' ? '' : state.playerName)}"
+              placeholder="z. B. Mia, Leo, Noah, Hannah ..."
+              style="width:100%;padding:9px 12px;font-size:15px;font-weight:800;border:2px solid #b45309;border-radius:8px;background:#fff;color:#2a1d10;"
+            />
+          </div>
+          <div>
+            <div style="font-weight:900;font-size:14.5px;color:#5a2d0c;margin-bottom:4px;">
+              3. Start-Epoche wählen:
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">${chPills}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.modalFooterEl.style.justifyContent = 'space-between';
+    this.modalFooterEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-weight:800;font-size:13px;color:#5a2d0c;">🔑 Hefter-Code (anderes iPad):</span>
+        <input
+          id="start-code-input"
+          type="text"
+          placeholder="z. B. MIA-W-K3-Q4"
+          style="padding:7px 10px;font-size:13.5px;font-weight:800;border:2px solid #8b5a2b;border-radius:7px;background:#fff;color:#2a1d10;width:165px;text-transform:uppercase;"
+        />
+        <button class="retro-btn" id="start-code-btn">📂 Code laden</button>
+      </div>
+      <button class="retro-btn" id="start-go-btn" style="background:#3b5e2b;color:#fff;font-size:16px;padding:10px 22px;border-color:#86efac;">
+        🚀 Abenteuer in Kapitel ${this.startSelectedChapter} starten!
+      </button>
+    `;
+
+    const nameInput = this.modalBodyEl.querySelector('#start-name-input') as HTMLInputElement;
+    const syncNameFromInput = () => {
+      const v = nameInput?.value.trim();
+      if (v) state.playerName = v.slice(0, 20);
+      else if (!state.playerName) state.playerName = 'Sippenkind';
+    };
+
+    this.modalBodyEl.querySelectorAll('[data-pick-gender]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        syncNameFromInput();
+        const g = (btn as HTMLElement).dataset.pickGender === 'male' ? 'male' : 'female';
+        state.setProfile(state.playerName, g);
+        this.renderStartModal();
+      });
+    });
+
+    this.modalBodyEl.querySelectorAll('[data-start-ch]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        syncNameFromInput();
+        this.startSelectedChapter = Number((btn as HTMLElement).dataset.startCh) || 1;
+        this.renderStartModal();
+      });
+    });
+
+    const resumeBtn = this.modalBodyEl.querySelector('#start-resume-btn');
+    if (resumeBtn) {
+      resumeBtn.addEventListener('click', () => {
+        syncNameFromInput();
+        state.setProfile(state.playerName, state.playerGender);
+        this.closePanels();
+        this.pushToast(`Willkommen zurück, ${state.playerName}!`);
+      });
+    }
+
+    this.modalFooterEl.querySelector('#start-go-btn')!.addEventListener('click', () => {
+      syncNameFromInput();
+      state.setProfile(state.playerName, state.playerGender);
+      const targetCh = this.startSelectedChapter;
+      this.closePanels();
+      if (targetCh !== state.chapter || !state.hasHadExistingSaveOnBoot) {
+        state.startChapter(targetCh);
+      }
+      this.pushToast(`Auf ins Abenteuer, ${state.playerName}! Sprich mit Älteste Ota (E).`);
+    });
+
+    this.modalFooterEl.querySelector('#start-code-btn')!.addEventListener('click', () => {
+      const codeInput = this.modalFooterEl.querySelector('#start-code-input') as HTMLInputElement;
+      const raw = codeInput?.value.trim() ?? '';
+      if (!raw) {
+        this.pushToast('Bitte gib zuerst deinen Hefter-Code ein (z. B. MIA-W-K3-Q4).');
+        return;
+      }
+      if (state.importCode(raw)) {
+        this.closePanels();
+        this.pushToast(`Spielstand geladen! Willkommen zurück, ${state.playerName} (Kapitel ${state.chapter})!`);
+      } else {
+        this.pushToast('Code nicht erkannt. Format-Beispiel: MIA-W-K3-Q4');
+      }
+    });
+  }
+
+  // ------------------------------------------------------------ Pausescreen (Statistiken, Spielzeit & Hefter-Code)
+
+  private renderPauseModal(): void {
+    state.persist();
+    this.modalCardEl.className = 'modal-card';
+    this.modalTitleEl.textContent = '⏸️ Spiel pausiert – Abenteuer-Statistik & Sicherung (P)';
+
+    const avatar = state.playerGender === 'female' ? state.femalePreviewUrl : state.malePreviewUrl;
+    const meta = CHAPTERS[state.chapter] ?? CHAPTERS[1];
+    const qText = meta.quests[Math.min(state.quest, meta.quests.length - 1)];
+    const t = state.dayTime;
+    const dayPhase = t < 0.55 ? '☀️ Tag' : t < 0.7 ? '🌅 Abenddämmerung' : t < 0.9 ? '🌙 Nacht' : '🌄 Morgengrauen';
+    const shortCode = state.exportCode();
+
+    const builtList =
+      state.buildings.length > 0
+        ? state.buildings.map((id) => BUILDINGS.find((b) => b.id === id)?.name ?? id).join(', ')
+        : 'Noch keine Dorfgebäude errichtet';
+
+    this.modalBodyEl.innerHTML = `
+      <div style="background:linear-gradient(135deg,#2b1a0c 0%,#462b14 100%);border:2px solid #e8c170;border-radius:10px;padding:12px 16px;color:#fff6e0;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div class="gender-avatar-box">
+            <img src="${avatar}" alt="${escapeHtml(state.playerName)}" />
+          </div>
+          <div>
+            <div style="display:inline-block;background:#fbbf24;color:#1a1208;font-weight:900;font-size:11px;padding:2px 8px;border-radius:99px;margin-bottom:3px;">
+              ⏸ ZEIT, HUNGER & SCHUTZ SIND ANGEHALTEN
+            </div>
+            <div style="font-size:19px;font-weight:900;color:#ffe28a;">
+              ${escapeHtml(state.playerName)} · <span style="font-size:15px;color:#fed7aa;">${escapeHtml(state.epochRankTitle())}</span>
+            </div>
+            <div style="font-size:13px;color:#e8dec5;margin-top:2px;">
+              <strong>Aktuelle Aufgabe:</strong> ${escapeHtml(qText)}
+            </div>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11.5px;color:#bbf7d0;font-weight:800;">✓ Automatisch auf diesem Gerät gespeichert</div>
+          <div style="font-size:12px;color:#fde68a;">${escapeHtml(meta.title)}</div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-tile">
+          <div class="stat-icon">⏱️</div>
+          <div>
+            <div class="stat-val">${escapeHtml(state.formatPlayTime())}</div>
+            <div class="stat-lbl">Gespielte Abenteuerzeit</div>
+          </div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-icon">☀️</div>
+          <div>
+            <div class="stat-val">Tag ${state.daysSurvived} (${dayPhase})</div>
+            <div class="stat-lbl">Überlebte Tage in der Urzeit</div>
+          </div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-icon">👣</div>
+          <div>
+            <div class="stat-val">${Math.round(state.distanceMeters)} Meter</div>
+            <div class="stat-lbl">Zu Fuß zurückgelegte Strecke</div>
+          </div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-icon">🎒</div>
+          <div>
+            <div class="stat-val">${state.totalItemsCollected()} Gegenstände</div>
+            <div class="stat-lbl">Gesammelt, geerntet & geschmiedet</div>
+          </div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-icon">🏠</div>
+          <div>
+            <div class="stat-val">${state.buildings.length} / ${BUILDINGS.length} Bauwerke</div>
+            <div class="stat-lbl" title="${escapeHtml(builtList)}">Im Steinzeit-Dorf errichtet</div>
+          </div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-icon">📖</div>
+          <div>
+            <div class="stat-val">${state.lexicon.length} / ${Object.keys(LEXICON).length} Begriffe (${state.knowledge}%)</div>
+            <div class="stat-lbl">Entdecktes Geschichtswissen</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fef3c7;border:2px solid #d97706;border-radius:10px;padding:12px 16px;margin-bottom:10px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="flex:1;min-width:240px;">
+            <div style="font-weight:900;font-size:15px;color:#7a3b10;">
+              📒 Dein kurzer Hefter-Code zum Unterbrechen / Gerätewechsel:
+            </div>
+            <div style="font-size:13px;color:#4a3520;margin-top:2px;">
+              Auf <strong>diesem Gerät</strong> kannst du beim nächsten Mal einfach auf „Weiter spielen“ klicken. Falls du in der nächsten Stunde ein <strong>anderes iPad</strong> bekommst, notiere dir diesen kurzen Code im Heft:
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span class="shortcode-pill">${escapeHtml(shortCode)}</span>
+            <button class="retro-btn" id="pause-copy-code">📋 Code kopieren</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fffdf7;border:1.5px solid #c29b61;border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <strong style="font-size:13.5px;color:#5a2d0c;">🧑 Figur & Name anpassen:</strong>
+          <input
+            id="pause-name-input"
+            type="text"
+            maxlength="20"
+            value="${escapeHtml(state.playerName)}"
+            style="padding:5px 10px;font-size:14px;font-weight:800;border:1.5px solid #8b5a2b;border-radius:6px;width:150px;"
+          />
+          <button class="retro-btn" data-pause-gender="female" style="background:${state.playerGender === 'female' ? '#b45309' : '#3a2410'};">
+            👧 Frau (Jägerin)
+          </button>
+          <button class="retro-btn" data-pause-gender="male" style="background:${state.playerGender === 'male' ? '#b45309' : '#3a2410'};">
+            👦 Mann (Jäger)
+          </button>
+          <button class="retro-btn" id="pause-save-profile">✓ Übernehmen</button>
+        </div>
+      </div>
+    `;
+
+    this.modalFooterEl.innerHTML = `
+      <button class="retro-btn" id="pause-startscreen-btn">🏠 Zum Startbildschirm</button>
+      <button class="retro-btn" id="pause-chapter-btn">🗺️ Epoche wechseln</button>
+      <button class="retro-btn" id="pause-resume-btn" style="background:#3b5e2b;color:#fff;font-size:15px;padding:8px 18px;">
+        ▶️ Weiter spielen (P)
+      </button>
+    `;
+
+    this.modalBodyEl.querySelector('#pause-copy-code')!.addEventListener('click', () => {
+      navigator.clipboard?.writeText(shortCode);
+      this.pushToast(`Hefter-Code kopiert: ${shortCode}`);
+    });
+
+    const savePauseProfile = (gender: 'female' | 'male') => {
+      const inp = this.modalBodyEl.querySelector('#pause-name-input') as HTMLInputElement;
+      const newName = inp?.value.trim() || state.playerName;
+      state.setProfile(newName, gender);
+      this.renderPauseModal();
+      this.pushToast(`Gespeichert: ${state.playerName} (${state.adventurerTitle()})`);
+    };
+
+    this.modalBodyEl.querySelectorAll('[data-pause-gender]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const g = (btn as HTMLElement).dataset.pauseGender === 'male' ? 'male' : 'female';
+        savePauseProfile(g);
+      });
+    });
+
+    this.modalBodyEl.querySelector('#pause-save-profile')!.addEventListener('click', () => {
+      savePauseProfile(state.playerGender);
+    });
+
+    this.modalFooterEl.querySelector('#pause-startscreen-btn')!.addEventListener('click', () => {
+      state.hasHadExistingSaveOnBoot = true;
+      this.activePanel = 'start';
+      this.renderActivePanel();
+    });
+    this.modalFooterEl.querySelector('#pause-chapter-btn')!.addEventListener('click', () => {
+      this.activePanel = 'chapter';
+      this.renderActivePanel();
+    });
+    this.modalFooterEl.querySelector('#pause-resume-btn')!.addEventListener('click', () => this.closePanels());
+  }
+
   // ------------------------------------------------------------ Kapitel-Auswahl & Hefter-Code (K)
 
   private renderChapterMenu(): void {
@@ -833,8 +1267,8 @@ export class UIScene extends Phaser.Scene {
     `;
 
     this.modalFooterEl.innerHTML = `
-      <button class="retro-btn" id="ch-name-btn">✎ Name ändern (${escapeHtml(state.playerName)})</button>
-      <button class="retro-btn" id="ch-export-btn">📋 Hefter-Code kopieren</button>
+      <button class="retro-btn" id="ch-pause-btn">⏸ Profil & Statistik</button>
+      <button class="retro-btn" id="ch-export-btn">📋 Hefter-Code (${escapeHtml(state.exportCode())})</button>
       <button class="retro-btn" id="ch-import-btn">📂 Hefter-Code laden</button>
       <button class="retro-btn" id="ch-cert-btn">📜 Epochen-Urkunde</button>
     `;
@@ -847,28 +1281,23 @@ export class UIScene extends Phaser.Scene {
       });
     });
 
-    this.modalFooterEl.querySelector('#ch-name-btn')!.addEventListener('click', () => {
-      const n = window.prompt('Dein Vorname für die Epochen-Urkunde:', state.playerName);
-      if (n && n.trim()) {
-        state.playerName = n.trim();
-        state.persist();
-        this.renderChapterMenu();
-        this.pushToast(`Name gespeichert: ${state.playerName}`);
-      }
+    this.modalFooterEl.querySelector('#ch-pause-btn')!.addEventListener('click', () => {
+      this.activePanel = 'pause';
+      this.renderActivePanel();
     });
     this.modalFooterEl.querySelector('#ch-export-btn')!.addEventListener('click', () => {
       const code = state.exportCode();
       navigator.clipboard?.writeText(code);
-      window.prompt('Kopiere diesen kurzen Speichercode in deinen Geschichtshefter:', code);
+      window.prompt('Notiere oder kopiere diesen kurzen Hefter-Code für die nächste Stunde:', code);
     });
     this.modalFooterEl.querySelector('#ch-import-btn')!.addEventListener('click', () => {
-      const code = window.prompt('Füge hier deinen Speichercode (SZ3-...) aus dem Hefter ein:');
+      const code = window.prompt('Gib hier deinen kurzen Hefter-Code ein (z. B. MIA-W-K3-Q4):');
       if (code) {
         this.closePanels();
         if (state.importCode(code)) {
-          this.pushToast('Spielstand aus Hefter-Code erfolgreich geladen!');
+          this.pushToast(`Spielstand geladen: ${state.playerName} (Kapitel ${state.chapter})!`);
         } else {
-          this.pushToast('Ungültiger Speichercode.');
+          this.pushToast('Ungültiger Code. Beispiel: MIA-W-K3-Q4');
         }
       }
     });
@@ -889,18 +1318,25 @@ export class UIScene extends Phaser.Scene {
 
   private renderCertificate(): void {
     this.modalCardEl.className = 'modal-card';
-    this.modalTitleEl.textContent = '📜 EPOCHEN-URKUNDE: VOM JÄGER ZUM SCHMIED';
+    this.modalTitleEl.textContent = `📜 EPOCHEN-URKUNDE: ${state.roleTitle().toUpperCase()}`;
 
     const lexTotal = Object.keys(LEXICON).length;
     const lexCount = state.lexicon.length;
     const bldCount = state.buildings.length;
+    const f = state.playerGender === 'female';
     const score = lexCount * 4 + bldCount * 6 + state.chapter * 5 - state.quizAttempts * 2 - state.collapses * 3;
     const rank =
       score >= 85 || (state.chapter === 6 && bldCount >= 6)
-        ? '🏆 Rang S – Meister/in der Menschheitsgeschichte'
+        ? f
+          ? '🏆 Rang S – Meisterin der Menschheitsgeschichte'
+          : '🏆 Rang S – Meister der Menschheitsgeschichte'
         : score >= 50 || state.chapter >= 4
-          ? '🥈 Rang A – Kundige/r Dorfgründer/in & Schmied/in'
-          : '🥉 Rang B – Tapfere/r Entdecker/in der Urgeschichte';
+          ? f
+            ? '🥈 Rang A – Kundige Dorfgründerin & Schmiedin'
+            : '🥈 Rang A – Kundiger Dorfgründer & Schmied'
+          : f
+            ? '🥉 Rang B – Tapfere Entdeckerin der Urgeschichte'
+            : '🥉 Rang B – Tapferer Entdecker der Urgeschichte';
 
     const builtNames =
       state.buildings.map((id) => BUILDINGS.find((b) => b.id === id)?.name ?? id).join(', ') || 'Noch im Aufbau';
@@ -919,12 +1355,14 @@ export class UIScene extends Phaser.Scene {
       <div style="background:#fffdf7;border:2px solid #b8860b;border-radius:10px;padding:16px;margin-bottom:12px;">
         <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;border-bottom:2px solid #e6d5b8;padding-bottom:10px;margin-bottom:12px;">
           <div>
-            <div style="font-size:12px;color:#786655;font-weight:700;">SCHÜLER/IN</div>
+            <div style="font-size:12px;color:#786655;font-weight:700;">${f ? 'ENTDECKERIN' : 'ENTDECKER'}</div>
             <div style="font-size:20px;font-weight:900;color:#5a2d0c;">${escapeHtml(state.playerName)}</div>
+            <div style="font-size:12.5px;color:#b45309;font-weight:700;">${escapeHtml(state.epochRankTitle())}</div>
           </div>
           <div>
             <div style="font-size:12px;color:#786655;font-weight:700;">ERREICHTE EPOCHE</div>
             <div style="font-size:17px;font-weight:800;color:#7a3b10;">${escapeHtml(CHAPTERS[state.chapter].title)}</div>
+            <div style="font-size:12.5px;color:#6b533b;">Spielzeit: ${escapeHtml(state.formatPlayTime())} · Tag ${state.daysSurvived}</div>
           </div>
           <div>
             <div style="font-size:12px;color:#786655;font-weight:700;">AUSZEICHNUNG</div>
@@ -936,7 +1374,7 @@ export class UIScene extends Phaser.Scene {
           <div>📖 <strong>Entdecktes Lexikon-Wissen:</strong> ${lexCount} von ${lexTotal} Einträgen (${state.knowledge}%)</div>
           <div>🏠 <strong>Dorf-Bauwerke (${bldCount}/${BUILDINGS.length}):</strong> ${escapeHtml(builtNames)}</div>
           <div>🐾 <strong>Begleiter & Herde:</strong> ${state.wolfTamed ? 'Hütehund Lupo' : '–'}, ${state.goatsTamed}× gezähmte Ziege(n)</div>
-          <div>🎯 <strong>Quiz-Fehlversuche:</strong> ${state.quizAttempts}</div>
+          <div>👣 <strong>Zurückgelegte Strecke:</strong> ${Math.round(state.distanceMeters)} m · 🎯 <strong>Quiz-Fehlversuche:</strong> ${state.quizAttempts}</div>
         </div>
 
         <div class="merksatz-box">
@@ -944,25 +1382,21 @@ export class UIScene extends Phaser.Scene {
           ${merksaetzeDone}
         </div>
 
-        <div style="margin-top:10px;font-size:11.5px;color:#6b553f;word-break:break-all;">
-          <strong>Hefter-Speichercode:</strong> <code>${escapeHtml(state.exportCode())}</code>
+        <div style="margin-top:10px;font-size:13px;color:#6b553f;">
+          <strong>Kurzer Hefter-Speichercode:</strong> <code style="font-size:14px;font-weight:900;color:#2a1d10;">${escapeHtml(state.exportCode())}</code>
         </div>
       </div>
     `;
 
     this.modalFooterEl.innerHTML = `
-      <button class="retro-btn" id="cert-name-btn">✎ Name eintragen</button>
+      <button class="retro-btn" id="cert-name-btn">✎ Figur & Name anpassen</button>
       <button class="retro-btn" id="cert-timeline-btn">⏳ Vergleichstabelle öffnen</button>
       <button class="retro-btn" id="cert-print-btn" style="background:#3b5e2b;color:#fff;">🖨 Urkunde & Merksätze drucken</button>
     `;
 
     this.modalFooterEl.querySelector('#cert-name-btn')!.addEventListener('click', () => {
-      const n = window.prompt('Dein Vorname für die Urkunde:', state.playerName);
-      if (n && n.trim()) {
-        state.playerName = n.trim();
-        state.persist();
-        this.renderCertificate();
-      }
+      this.activePanel = 'pause';
+      this.renderActivePanel();
     });
     this.modalFooterEl.querySelector('#cert-timeline-btn')!.addEventListener('click', () => {
       this.activePanel = 'timeline';
