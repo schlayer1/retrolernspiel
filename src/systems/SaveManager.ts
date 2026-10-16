@@ -16,16 +16,20 @@ export interface FarmPlotState {
 }
 
 export type PlayerGender = 'female' | 'male';
+export type PlayerRole = 'hunter' | 'gatherer' | 'crafter';
 
 export interface SaveData {
   version: 3;
   playerName: string;
   playerGender?: PlayerGender;
+  playerRole?: PlayerRole;
   chapter: number;
   x: number;
   y: number;
   inventory: Record<string, number>;
   lexicon: string[];
+  relicsFound?: string[];
+  relicQuizAnswered?: string[];
   food: number;
   safety: number;
   knowledge: number;

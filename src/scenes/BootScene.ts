@@ -53,6 +53,8 @@ export class BootScene extends Phaser.Scene {
     this.load.image('objects', 'assets/gfx/objects.png');
     this.load.image('farm', 'assets/gfx/farm.png');
     this.load.image('ores', 'assets/gfx/ores.png');
+    this.load.image('cave_tiles', 'assets/gfx/cave.png');
+    this.load.image('inner_tiles', 'assets/gfx/Inner.png');
     this.load.spritesheet('goat', 'assets/gfx/goat.png', { frameWidth: 80, frameHeight: 80 });
     this.load.spritesheet('player', 'assets/gfx/character.png', { frameWidth: 16, frameHeight: 32 });
     this.load.spritesheet('npc', 'assets/gfx/NPC_test.png', { frameWidth: 16, frameHeight: 32 });
@@ -118,7 +120,8 @@ export class BootScene extends Phaser.Scene {
         frames: [{ key: 'player_female', frame: start }],
         frameRate: 1,
       });
-    });
+
+      });
 
     this.anims.create({
       key: 'fire',
@@ -207,6 +210,15 @@ export class BootScene extends Phaser.Scene {
       frameWidth: 16,
       frameHeight: 32,
     });
+    this.textures.addSpriteSheet('player_egypt_female', canvas as unknown as HTMLImageElement, {
+      frameWidth: 16,
+      frameHeight: 32,
+    });
+    this.textures.addSpriteSheet(
+      'player_egypt_male',
+      this.textures.get('player').getSourceImage() as HTMLImageElement,
+      { frameWidth: 16, frameHeight: 32 },
+    );
   }
 
   /** Extrahiert scharfe Data-URLs der Spielgrafiken für den Start- und Pausescreen. */
@@ -339,6 +351,41 @@ export class BootScene extends Phaser.Scene {
     g9.fillStyle(0xc8d2de, 1).fillRect(6, 9, 2, 2).fillRect(14, 11, 2, 2); // Metallischer Eisenglanz
     g9.generateTexture('iron_vein', 24, 22);
     g9.destroy();
+
+    // 10. Schaduf-Schöpfwerk (32x32)
+    const gs = this.add.graphics();
+    gs.fillStyle(0x6b4226, 1).fillRect(14, 12, 4, 18); // Senkrechter Pfosten
+    gs.fillStyle(0x8b5a2b, 1).fillRect(4, 8, 24, 3);   // Schwingbalken
+    gs.fillStyle(0x3e3d47, 1).fillRect(4, 5, 6, 6);   // Gegengewichts-Stein
+    gs.fillStyle(0x358dbf, 1).fillRect(24, 14, 2, 8); // Seil & Ledereimer
+    gs.fillStyle(0x2774a3, 1).fillRect(23, 22, 4, 4); // Eimer
+    gs.generateTexture('schaduf_prop', 32, 32);
+    gs.destroy();
+
+    // 11. Nilometer (16x32)
+    const gn = this.add.graphics();
+    gn.fillStyle(0xd9c298, 1).fillRect(2, 4, 12, 28); // Steinsäule
+    gn.fillStyle(0x8c734b, 1).fillRect(2, 4, 12, 2).fillRect(2, 30, 12, 2); // Sockel/Kapitell
+    gn.fillStyle(0x1e293b, 1);
+    for (let y = 8; y < 28; y += 4) {
+      gn.fillRect(4, y, 8, 2); // Mess-Einkerbungen
+    }
+    gn.generateTexture('nilometer_prop', 16, 32);
+    gn.destroy();
+
+    // 12. Fischreuse (16x16 geflochtenes Schilf)
+    const gf = this.add.graphics();
+    gf.fillStyle(0x8a703b, 1).fillEllipse(8, 8, 14, 8);
+    gf.fillStyle(0x4a3b1d, 1).fillEllipse(8, 8, 10, 4);
+    gf.generateTexture('fish_trap', 16, 16);
+    gf.destroy();
+
+    // 13. Nilschlamm-Haufen (clay_pile, 16x16)
+    const gc = this.add.graphics();
+    gc.fillStyle(0x3d2817, 1).fillEllipse(8, 11, 14, 6);
+    gc.fillStyle(0x593d25, 1).fillEllipse(8, 9, 10, 5);
+    gc.generateTexture('clay_pile', 16, 16);
+    gc.destroy();
   }
 }
 

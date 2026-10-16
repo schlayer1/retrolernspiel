@@ -1,10 +1,5 @@
 import Phaser from 'phaser';
-import { state } from '../systems/GameState';
 
-/**
- * Virtueller Joystick (linke Bildschirmhälfte, erscheint dort, wo getippt wird)
- * und Aktionsbutton (rechts unten). Nur aktiv auf Touch-Geräten.
- */
 export class TouchControls {
   vector = new Phaser.Math.Vector2(0, 0);
   actionPressed = false;
@@ -17,7 +12,7 @@ export class TouchControls {
   private origin = new Phaser.Math.Vector2();
   private readonly radius = 28;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, private isModal?: () => boolean) {
     const w = scene.scale.width;
     const h = scene.scale.height;
 
@@ -30,7 +25,7 @@ export class TouchControls {
     this.knob.setVisible(false);
 
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (state.modal) return;
+      if (this.isModal && this.isModal()) return;
       if (Phaser.Math.Distance.Between(p.x, p.y, this.button.x, this.button.y) < 30) {
         this.actionPressed = true;
         return;

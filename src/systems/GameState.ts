@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { sfx } from '../audio/sound';
 import { CHAPTERS, DialogNode, LEXICON } from '../data/chapter1';
 import { BuildingDef, BuildingId, ItemId, Recipe, TradeOffer } from '../data/items';
-import { FarmPlotState, Placed, PlayerGender, SaveData, SaveManager } from './SaveManager';
+import { FarmPlotState, Placed, PlayerGender, PlayerRole, SaveData, SaveManager } from './SaveManager';
 
 export const DAY_MS = 240_000; // Dauer eines Tages in Echtzeit
 export const TRAP_MS = 20_000; // Zeit, bis eine Falle etwas gefangen hat
@@ -14,12 +14,49 @@ export interface DialogSpec {
   onDone?: () => void;
 }
 
+export interface RoleDef {
+  id: PlayerRole;
+  name: string;
+  icon: string;
+  title: string;
+  desc: string;
+  perk: string;
+}
+
+export const ROLES: Record<PlayerRole, RoleDef> = {
+  hunter: {
+    id: 'hunter',
+    name: 'Jäger / Jägerin',
+    icon: '🏹',
+    title: 'Meisterjäger/in',
+    desc: 'Aufgewachsen auf den Fährten des Wildes. Schnell zu Fuß und treffsicher.',
+    perk: '+20% Lauftempo, 2× Beute in Fallen & schärferer Spurensinn.',
+  },
+  gatherer: {
+    id: 'gatherer',
+    name: 'Sammler / Sammlerin',
+    icon: '🌿',
+    title: 'Hüter/in der Natur',
+    desc: 'Kennt jedes heilsame Kraut, jede Beere und die Geheimnisse des Bodens.',
+    perk: '2× Beerenernte, Kälteschutz (Sicherheit sinkt 35% langsamer) & Heilwissen.',
+  },
+  crafter: {
+    id: 'crafter',
+    name: 'Handwerker / Baumeisterin',
+    icon: '⚒️',
+    title: 'Großschmied/in',
+    desc: 'Geschickte Hände an Holz, Stein, Ton und Metall. Baut für die Ewigkeit.',
+    perk: '30% Materialrabatt auf Gebäude & Öfen, Extra-Erzausbeute im Fels.',
+  },
+};
+
 /**
-  * Zentraler Spielzustand, geteilt zwischen WorldScene (Spielwelt) und UIScene (Oberfläche).
-  */
+ * Zentraler Spielzustand, geteilt zwischen WorldScene (Spielwelt) und UIScene (Oberfläche).
+ */
 class GameState extends Phaser.Events.EventEmitter {
   playerName = 'Sippenkind';
   playerGender: PlayerGender = 'female';
+  playerRole: PlayerRole = 'gatherer';
   chapter = 1;
   inventory: Partial<Record<ItemId, number>> = {};
   food = 85;
@@ -27,6 +64,8 @@ class GameState extends Phaser.Events.EventEmitter {
   knowledge = 0;
   quest = 0;
   lexicon: string[] = [];
+  relicsFound: string[] = [];
+  relicQuizAnswered: string[] = [];
   counts: Record<string, number> = {};
   fires: Placed[] = [];
   traps: Placed[] = [];
@@ -162,11 +201,78 @@ class GameState extends Phaser.Events.EventEmitter {
     this.knowledge = Math.min(100, Math.round((this.lexicon.length / Object.keys(LEXICON).length) * 100));
   }
 
+  // Rollen-Boni
+  get moveSpeedMultiplier(): number {
+    return this.playerRole === 'hunter' ? 1.2 : 1.0;
+  }
+
+  get trapYieldMultiplier(): number {
+    return this.playerRole === 'hunter' ? 2 : 1;
+  }
+
+  get berryYieldMultiplier(): number {
+    return this.playerRole === 'gatherer' ? 2 : 1;
+  }
+
+  get buildingDiscount(): number {
+    return this.playerRole === 'crafter' ? 0.7 : 1.0;
+  }
+
+  getBuildingCost(baseCost: Partial<Record<ItemId, number>>): Partial<Record<ItemId, number>> {
+    if (this.playerRole !== 'crafter') return baseCost;
+    const discounted: Partial<Record<ItemId, number>> = {};
+    for (const [k, v] of Object.entries(baseCost)) {
+      if (typeof v === 'number') {
+        discounted[k as ItemId] = Math.max(1, Math.round(v * 0.7));
+      }
+    }
+    return discounted;
+  }
+
+  /**
+   * Startet ein völlig frisches Spiel ab dem gewählten Kapitel.
+   * Behält Name, Geschlecht und gewählte Rolle, setzt jedoch alle zukünftigen Gebäude,
+   * Tiere und Inventar sauber auf den Stand des Startkapitels zurück.
+   */
+  resetNewGame(ch = 1): void {
+    this.playTimeSec = 0;
+    this.distanceMeters = 0;
+    this.collapses = 0;
+    this.quizAttempts = 0;
+    this.daysSurvived = 1;
+    this.food = 85;
+    this.safety = 85;
+    this.inventory = {};
+    this.counts = {};
+    this.fires = [];
+    this.traps = [];
+    this.startChapter(ch, true);
+  }
+
   /** Wechselt in ein neues Kapitel (über Ota oder über den Kapitel-Umschalter). */
-  startChapter(ch: number): void {
+  startChapter(ch: number, isFresh = false): void {
     if (!CHAPTERS[ch]) return;
     this.chapter = ch;
     this.quest = 0;
+
+    // Deterministische Rücksetzung von Gebäuden, Gehegen und Tieren auf den exakten Epochenstand
+    this.buildings = [];
+    this.wolfTamed = false;
+    this.goatsTamed = 0;
+    this.plots = [
+      { id: 0, stage: 'raw', wateredAt: 0 },
+      { id: 1, stage: 'raw', wateredAt: 0 },
+      { id: 2, stage: 'raw', wateredAt: 0 },
+      { id: 3, stage: 'raw', wateredAt: 0 },
+      { id: 4, stage: 'raw', wateredAt: 0 },
+      { id: 5, stage: 'raw', wateredAt: 0 },
+    ];
+
+    if (ch === 1 || isFresh) {
+      this.fires = [];
+      this.traps = [];
+    }
+
     this.unlockSilent(['sippe', 'nomaden']);
     // Sinnvolle Grundausstattung, falls direkt in ein höheres Kapitel gesprungen wird
     if (ch >= 2) {
@@ -339,16 +445,22 @@ class GameState extends Phaser.Events.EventEmitter {
     return 'Du hast nichts zu essen.';
   }
 
-  setProfile(name: string, gender: PlayerGender): void {
+  setProfile(name: string, gender: PlayerGender, role?: PlayerRole): void {
     const clean = name.trim();
     if (clean) this.playerName = clean.slice(0, 22);
     this.playerGender = gender === 'male' ? 'male' : 'female';
+    if (role) this.playerRole = role;
     this.emit('profileChanged');
     this.persist();
   }
 
   roleTitle(): string {
     return this.playerGender === 'female' ? 'Von der Jägerin zur Schmiedin' : 'Vom Jäger zum Schmied';
+  }
+
+  roleSpecialistTitle(): string {
+    const r = ROLES[this.playerRole];
+    return r ? r.title : 'Entdecker/in';
   }
 
   adventurerTitle(): string {
@@ -390,7 +502,7 @@ class GameState extends Phaser.Events.EventEmitter {
 
   /**
    * Erzeugt einen kinderleicht abschreibbaren Kurz-Code für den Geschichtshefter
-   * (ohne Datenbank, 100 % datenschutzfrei): z. B. "MIA-W-K3-Q4-12M".
+   * (ohne Datenbank, 100 % datenschutzfrei): z. B. "STZ-MIA-W-J-K3-Q4-R2-12M".
    */
   exportCode(): string {
     const cleanName = (this.playerName || 'KIND')
@@ -399,30 +511,34 @@ class GameState extends Phaser.Events.EventEmitter {
       .replace(/[^A-ZÄÖÜ0-9]/g, '')
       .slice(0, 10) || 'KIND';
     const g = this.playerGender === 'male' ? 'M' : 'W';
+    const rChar = this.playerRole === 'hunter' ? 'J' : this.playerRole === 'crafter' ? 'H' : 'S';
     const mins = Math.max(1, Math.round(this.playTimeSec / 60));
-    return `${cleanName}-${g}-K${this.chapter}-Q${this.quest}-${mins}M`;
+    const relCount = this.relicsFound.length;
+    return `STZ-${cleanName}-${g}-${rChar}-K${this.chapter}-Q${this.quest}-R${relCount}-${mins}M`;
   }
 
   /**
-   * Lädt sowohl den kinderleichten Kurz-Code (z. B. "MIA-W-K3-Q4-12M" oder "LEO-M-K5-Q2")
+   * Lädt sowohl den kinderleichten Kurz-Code (z. B. "STZ-MIA-W-J-K3-Q4-R2-12M" oder "LEO-M-K5-Q2")
    * als auch ältere SZ3-Codes aus dem Geschichtshefter.
    */
   importCode(raw: string): boolean {
     const trimmed = raw.trim();
     if (!trimmed) return false;
 
-    // 1. Prüfung auf Kurz-Code: NAME-W/M-K3-Q4(-12M)
-    const shortMatch = trimmed.match(/^([A-Za-zÄÖÜäöüß0-9_]{1,16})\s*-\s*([WwMmFf])\s*-\s*[Kk]?([1-6])(?:\s*-\s*[QqAa]?([0-8]))?(?:\s*-\s*(\d+)[Mm]?)?$/);
+    // 1. Prüfung auf Kurz-Code mit optionalem Präfix und Rolle/Relikten
+    const shortMatch = trimmed.match(/^(?:STZ-)?([A-Za-zÄÖÜäöüß0-9_]{1,16})\s*-\s*([WwMmFf])(?:\s*-\s*([JjSsHh]))?\s*-\s*[Kk]?([1-6])(?:\s*-\s*[QqAa]?([0-8]))?(?:\s*-\s*[Rr]?(\d+))?(?:\s*-\s*(\d+)[Mm]?)?$/);
     if (shortMatch) {
       const rawName = shortMatch[1];
       const formattedName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
       const gChar = shortMatch[2].toUpperCase();
-      const ch = Math.max(1, Math.min(6, Number(shortMatch[3]) || 1));
-      const q = Math.max(0, Math.min(8, Number(shortMatch[4] ?? 0)));
-      const mins = Number(shortMatch[5] ?? 5);
+      const roleChar = (shortMatch[3] ?? 'S').toUpperCase();
+      const ch = Math.max(1, Math.min(6, Number(shortMatch[4]) || 1));
+      const q = Math.max(0, Math.min(8, Number(shortMatch[5] ?? 0)));
+      const mins = Number(shortMatch[7] ?? shortMatch[6] ?? 5);
 
       this.playerName = formattedName;
       this.playerGender = gChar === 'M' ? 'male' : 'female';
+      this.playerRole = roleChar === 'J' ? 'hunter' : roleChar === 'H' ? 'crafter' : 'gatherer';
       this.playTimeSec = Math.max(this.playTimeSec, mins * 60);
       this.startChapter(ch);
       this.applyQuestProgressForChapter(ch, q);
@@ -442,6 +558,7 @@ class GameState extends Phaser.Events.EventEmitter {
       if (!d || typeof d.c !== 'number') return false;
       this.playerName = typeof d.n === 'string' && d.n.trim() ? d.n.trim() : 'Sippenkind';
       if (d.gnd === 'male' || d.gnd === 'female') this.playerGender = d.gnd;
+      if (d.role === 'hunter' || d.role === 'gatherer' || d.role === 'crafter') this.playerRole = d.role;
       this.chapter = Math.max(1, Math.min(6, d.c));
       this.quest = d.q ?? 0;
       this.buildings = Array.isArray(d.b) ? d.b : [];
@@ -581,11 +698,14 @@ class GameState extends Phaser.Events.EventEmitter {
       version: 3,
       playerName: this.playerName,
       playerGender: this.playerGender,
+      playerRole: this.playerRole,
       chapter: this.chapter,
       x: this.playerX ?? 0,
       y: this.playerY ?? 0,
       inventory: { ...this.inventory } as Record<string, number>,
       lexicon: [...this.lexicon],
+      relicsFound: [...this.relicsFound],
+      relicQuizAnswered: [...this.relicQuizAnswered],
       food: this.food,
       safety: this.safety,
       knowledge: this.knowledge,
@@ -609,9 +729,12 @@ class GameState extends Phaser.Events.EventEmitter {
   loadFrom(d: SaveData): void {
     this.playerName = d.playerName || 'Sippenkind';
     this.playerGender = d.playerGender === 'male' ? 'male' : 'female';
+    if (d.playerRole) this.playerRole = d.playerRole;
     this.chapter = d.chapter ?? 1;
     this.inventory = { ...d.inventory } as Partial<Record<ItemId, number>>;
     this.lexicon = [...d.lexicon];
+    if (Array.isArray(d.relicsFound)) this.relicsFound = [...d.relicsFound];
+    if (Array.isArray(d.relicQuizAnswered)) this.relicQuizAnswered = [...d.relicQuizAnswered];
     this.food = d.food;
     this.safety = d.safety;
     this.knowledge = d.knowledge;

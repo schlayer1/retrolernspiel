@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { sfx } from '../audio/sound';
 import { CHAPTERS } from '../data/chapter1';
 import { BUILDINGS, BuildingDef, BuildingId, ITEMS, ItemId, RECIPES, RecipeId } from '../data/items';
 import { CROP_MS, DAY_MS, TRAP_MS, state } from '../systems/GameState';
@@ -33,7 +34,9 @@ type Kind =
   | 'merchant'
   | 'mine_entrance'
   | 'copper_vein'
-  | 'iron_vein';
+  | 'iron_vein'
+  | 'relic_oetzi'
+  | 'relic_himmelsscheibe';
 
 interface DomLabel {
   x: number;
@@ -372,12 +375,12 @@ export class WorldScene extends Phaser.Scene {
       this.addLabel(mx, my - 42, 'Fernhändler Enki (Tauschhandel)', '#ffd86b');
     }
 
-    // 7. Kapitel 5+: Bergbau-Stollen im hohen Norden + Kupfererz-Adern (und Eisenerz ab Kap. 6)
-    if (state.chapter >= 5) {
-      const cave = this.addNode('mine_entrance', 'overworld', 'cave_entrance', 370, 56, true);
-      cave.sprite.setDepth(64);
-      this.addLabel(370, 22, 'Bergbau-Stollen (Nordwand)', '#ffcc88');
+    // 7. Begehbarer Höhleneingang in der Nordwand (immer zugänglich für Zuflucht, Höhlenkunst & Bergbau)
+    const cave = this.addNode('mine_entrance', 'overworld', 'cave_entrance', 370, 56, true);
+    cave.sprite.setDepth(64);
+    this.addLabel(370, 22, 'Höhle & Bergbau-Stollen [E]', '#ffcc88');
 
+    if (state.chapter >= 5) {
       const copperCoords: Array<[number, number]> = [
         [312, 78],
         [345, 92],
@@ -400,6 +403,13 @@ export class WorldScene extends Phaser.Scene {
         ir.label = this.addLabel(x, y - 15, 'Eisenerz', '#b8d0eb');
       });
     }
+
+    // 8. Urzeit-Relikte in der Oberwelt
+    const oetziNode = this.addNode('relic_oetzi', 'objects', 'bubble_excl', 210, 52, true);
+    oetziNode.label = this.addLabel(210, 34, '🗡️ Ötzis Kupferdolch', '#fbbf24');
+
+    const nebraNode = this.addNode('relic_himmelsscheibe', 'objects', 'bubble_excl', 540, 360, true);
+    nebraNode.label = this.addLabel(540, 342, '✨ Himmelsscheibe von Nebra', '#38bdf8');
   }
 
   private applyBuiltVisual(n: Node, b: BuildingDef): void {
@@ -536,12 +546,13 @@ export class WorldScene extends Phaser.Scene {
 
     const v = new Phaser.Math.Vector2(vx, vy);
     if (v.length() > 1) v.normalize();
-    this.player.setVelocity(v.x * SPEED, v.y * SPEED);
+    const curSpeed = SPEED * state.moveSpeedMultiplier;
+    this.player.setVelocity(v.x * curSpeed, v.y * curSpeed);
 
     if (v.length() > 0.01) {
       this.facing = Math.abs(v.x) > Math.abs(v.y) ? (v.x > 0 ? 'right' : 'left') : v.y > 0 ? 'down' : 'up';
       this.player.anims.play(`walk-${state.playerGender}-${this.facing}`, true);
-      state.distanceMeters += (v.length() * SPEED * (delta / 1000)) / 12;
+      state.distanceMeters += (v.length() * curSpeed * (delta / 1000)) / 12;
     } else {
       this.player.anims.play(`idle-${state.playerGender}-${this.facing}`, true);
     }
@@ -896,12 +907,14 @@ export class WorldScene extends Phaser.Scene {
       case 'build_site': {
         const b = n.buildingDef!;
         if (state.hasBuilding(b.id)) {
-          return `E: ${b.name} (${b.helperName})`;
+          if (b.id === 'langhaus') return 'E: Langhaus betreten (Schlafplatz & Vorräte)';
+          return `E: Mit ${b.helperName} (${b.name}) sprechen`;
         }
-        const costStr = Object.entries(b.cost)
+        const cost = state.getBuildingCost(b.cost);
+        const costStr = Object.entries(cost)
           .map(([id, cnt]) => `${cnt}× ${ITEMS[id as ItemId].name}`)
           .join(', ');
-        return `E: ${b.name} bauen (${costStr})`;
+        return `E: ${b.name} bauen (${costStr})${state.buildingDiscount < 1 ? ' (⚒️ Rabatt)' : ''}`;
       }
       case 'wild_goat':
         if (!state.hasBuilding('gehege')) return 'Wildziege (baue zuerst das Tiergehege!)';
@@ -911,7 +924,11 @@ export class WorldScene extends Phaser.Scene {
       case 'merchant':
         return 'E: Mit Fernhändler Enki Waren tauschen (ohne Münzen!)';
       case 'mine_entrance':
-        return 'E: Bergbau-Stollen in der Nordwand inspizieren';
+        return 'E: Höhle & Bergbau-Stollen betreten';
+      case 'relic_oetzi':
+        return 'E: Ötzis Kupferdolchklinge untersuchen';
+      case 'relic_himmelsscheibe':
+        return 'E: Fragment der Himmelsscheibe von Nebra freilegen';
       case 'copper_vein':
         if (depleted) return 'Die Kupferader erholt sich ...';
         return state.count('spitzhacke') > 0 ? 'E: Rötliches Kupfererz mit Spitzhacke abbauen' : 'Kupfererz-Ader (benötigt Spitzhacke, C)';
@@ -925,6 +942,8 @@ export class WorldScene extends Phaser.Scene {
         return 'E: Am Lagerfeuer ausruhen (bis zum nächsten Tag)';
       case 'trap':
         return n.placed && Date.now() - n.placed.t >= TRAP_MS ? 'E: Falle leeren' : 'Die Falle ist noch leer ...';
+      default:
+        return '';
     }
   }
 
@@ -938,11 +957,12 @@ export class WorldScene extends Phaser.Scene {
       case 'clay': {
         if (now < n.readyAt) return;
         if (n.kind === 'berry') {
-          const amt = Phaser.Math.Between(1, 3);
+          const base = Phaser.Math.Between(1, 3);
+          const amt = base * state.berryYieldMultiplier;
           state.add('beere', amt);
           state.unlock('sammeln');
           state.bump('beere', amt);
-          state.emit('toast', `+${amt} Beeren`);
+          state.emit('toast', `+${amt} Beeren${state.berryYieldMultiplier > 1 ? ' (🌿 Sammler-Bonus!)' : ''}`);
         } else if (n.kind === 'stump') {
           state.add('stock', 2);
           state.bump('stock', 2);
@@ -1003,15 +1023,15 @@ export class WorldScene extends Phaser.Scene {
         break;
       }
       case 'mine_entrance': {
-        state.unlock('bergbau');
-        state.openDialog({
-          speaker: 'Bergbau-Stollen',
-          nodes: [
-            {
-              text: 'Tiefe Schürfspuren führen in die Nordwand. Mit einer Spitzhacke (C) kannst du an den glitzernden Felsen vor dem Stollen Kupfer- und Eisenerz abbauen!',
-            },
-          ],
-        });
+        this.enterCave();
+        break;
+      }
+      case 'relic_oetzi': {
+        state.emit('openRelicQuiz', 'oetzi_dolch');
+        break;
+      }
+      case 'relic_himmelsscheibe': {
+        state.emit('openRelicQuiz', 'himmelsscheibe');
         break;
       }
       case 'copper_vein': {
@@ -1127,6 +1147,10 @@ export class WorldScene extends Phaser.Scene {
   private interactBuilding(n: Node): void {
     const b = n.buildingDef!;
     if (state.hasBuilding(b.id)) {
+      if (b.id === 'langhaus') {
+        this.enterLonghouse();
+        return;
+      }
       if (b.id === 'toepferofen' && state.count('tontopf') === 0 && state.count('wasser') === 0) {
         state.add('tontopf', 1);
         state.emit('toast', `${b.helperName}: „Hier hast du einen frischen Tontopf!“`);
@@ -1138,14 +1162,15 @@ export class WorldScene extends Phaser.Scene {
       }
       return;
     }
+    const cost = state.getBuildingCost(b.cost);
     if (!state.canAffordBuilding(b)) {
-      const missing = Object.entries(b.cost)
+      const missing = Object.entries(cost)
         .map(([id, cnt]) => `${cnt}× ${ITEMS[id as ItemId].name} (du hast ${state.count(id as ItemId)})`)
         .join(', ');
       state.emit('toast', `Für ${b.name} benötigt: ${missing}`);
       return;
     }
-    state.spendCost(b.cost);
+    state.spendCost(cost);
     state.buildings.push(b.id);
     this.applyBuiltVisual(n, b);
     if (b.id === 'langhaus') state.unlock('langhaus');
@@ -1271,15 +1296,38 @@ export class WorldScene extends Phaser.Scene {
       state.emit('toast', 'Noch nichts gefangen. Komm gleich wieder.');
       return;
     }
-    state.add('fleisch', 1);
-    state.add('fell', 1);
+    const amt = 1 * state.trapYieldMultiplier;
+    state.add('fleisch', amt);
+    state.add('fell', amt);
     state.unlock('falle');
     state.traps = state.traps.filter((t) => t !== n.placed);
     n.bubble?.destroy();
     n.sprite.destroy();
     this.nodes = this.nodes.filter((x) => x !== n);
-    state.emit('toast', '+1 Fleisch, +1 Fell');
-    state.bump('meat');
+    state.emit('toast', `+${amt} Fleisch, +${amt} Fell${state.trapYieldMultiplier > 1 ? ' (🏹 Jäger-Bonus!)' : ''}`);
+    state.bump('meat', amt);
+  }
+
+  private enterCave(): void {
+    state.modal = true;
+    sfx.step();
+    this.cameras.main.fadeOut(350, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      state.modal = false;
+      this.scene.sleep('World');
+      this.scene.run('Cave');
+    });
+  }
+
+  private enterLonghouse(): void {
+    state.modal = true;
+    sfx.door();
+    this.cameras.main.fadeOut(350, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      state.modal = false;
+      this.scene.sleep('World');
+      this.scene.run('Longhouse');
+    });
   }
 
   // ---------------------------------------------------------------- Handwerk (C)

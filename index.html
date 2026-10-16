@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <title>Vom Jäger zum Schmied – Interaktives Geschichtsspiel (Kl. 5/6)</title>
+    <title>SNES Geschichts-Portal – Interaktive 16-Bit-Lernabenteuer (Heimbürgeschule Kahla)</title>
     <style>
       * {
         box-sizing: border-box;
@@ -641,6 +641,151 @@
         line-height: 1.2;
       }
 
+      /* Epochen-Portal & Zeitportal */
+      .portal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: radial-gradient(circle at center, #1e1b18 0%, #0d0a08 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        overflow-y: auto;
+      }
+      .portal-container {
+        max-width: 980px;
+        width: 100%;
+        background: rgba(30, 24, 18, 0.95);
+        border: 3px double #d4af37;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(212, 175, 55, 0.15);
+        border-radius: 12px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .portal-header {
+        text-align: center;
+      }
+      .portal-title {
+        font-size: clamp(20px, 2.5vw, 28px);
+        color: #fde047;
+        letter-spacing: 2px;
+        text-shadow: 2px 2px 0 #000, 0 0 12px rgba(253, 224, 71, 0.5);
+        margin: 0 0 6px 0;
+      }
+      .portal-sub {
+        font-size: clamp(12px, 1.3vw, 15px);
+        color: #cbd5e1;
+        margin: 0;
+      }
+      .portal-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        margin: 10px 0;
+      }
+      .portal-card {
+        background: #2a2015;
+        border: 2px solid #854d0e;
+        border-radius: 10px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        text-align: left;
+      }
+      .portal-card:hover {
+        border-color: #fde047;
+      }
+      .portal-img-wrap {
+        height: 120px;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1.5px solid #854d0e;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .portal-content {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 1;
+      }
+      .portal-name {
+        margin: 0;
+        font-size: 15px;
+        color: #fef08a;
+      }
+      .portal-desc {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #cbd5e1;
+        margin: 0;
+        flex: 1;
+      }
+      .portal-features {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 11px;
+        color: #93c5fd;
+      }
+      .portal-features span {
+        background: rgba(15, 23, 42, 0.7);
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #334155;
+      }
+      .portal-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+      .btn-steinzeit {
+        background: linear-gradient(180deg, #166534 0%, #14532d 100%);
+        border-color: #4ade80;
+        color: #ffffff;
+      }
+      .btn-egypt {
+        background: linear-gradient(180deg, #854d0e 0%, #713f12 100%);
+        border-color: #fde047;
+        color: #ffffff;
+      }
+      .portal-card-locked {
+        opacity: 0.65;
+      }
+      .portal-badge {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 900;
+        padding: 3px 8px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        width: fit-content;
+      }
+      .badge-active {
+        background: #22c55e;
+        color: #052e16;
+      }
+      .badge-new {
+        background: #eab308;
+        color: #422006;
+      }
+      .badge-locked {
+        background: #475569;
+        color: #f8fafc;
+      }
+      .badge-preview {
+        background: #94a3b8;
+        color: #0f172a;
+      }
+
       .gender-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -865,7 +1010,86 @@
       }
       .tag-tool { background: #dbeafe; color: #1e40af; }
       .tag-food { background: #dcfce7; color: #166534; }
-      .tag-material { background: #ffedd5; color: #9a3412; }
+      /* Rollen-Auswahl & Archäologie-Relikte */
+      .role-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 10px;
+        margin-top: 6px;
+      }
+      .role-card {
+        background: #fffdf7;
+        border: 2px solid #c29b61;
+        border-radius: 9px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        cursor: pointer;
+        text-align: left;
+        transition: transform 0.08s ease, border-color 0.12s ease;
+      }
+      .role-card:hover {
+        transform: translateY(-1px);
+        border-color: #b45309;
+      }
+      .role-card.active {
+        background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);
+        border-color: #b45309;
+        box-shadow: 0 3px 10px rgba(180, 83, 9, 0.22);
+      }
+      .role-badge {
+        font-size: 11px;
+        font-weight: 800;
+        background: #3a2410;
+        color: #fde68a;
+        padding: 2px 7px;
+        border-radius: 4px;
+        display: inline-block;
+        width: fit-content;
+      }
+      .role-perk {
+        font-size: 11.5px;
+        color: #166534;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .relic-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 8px;
+        margin: 8px 0;
+      }
+      .relic-card {
+        background: #fffdf7;
+        border: 2px solid #c29b61;
+        border-radius: 8px;
+        padding: 8px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .relic-card.locked {
+        opacity: 0.55;
+        background: #f1ede4;
+        filter: grayscale(1);
+      }
+      .relic-card.found {
+        border-color: #d97706;
+        background: #fffbeb;
+      }
+      .relic-icon-big {
+        font-size: 28px;
+        line-height: 1;
+      }
+      .relic-name {
+        font-size: 11.5px;
+        font-weight: 800;
+        color: #3b2310;
+      }
 
       @media print {
         body {

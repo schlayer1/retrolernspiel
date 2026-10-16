@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
+import { sfx } from '../audio/sound';
 import { CHAPTERS, DialogNode, EPOCH_COMPARISON, HIGHLIGHT_TERMS, LEXICON } from '../data/chapter1';
 import { BUILDINGS, ITEMS, ItemId, RECIPES, Recipe, TRADES, TradeOffer } from '../data/items';
-import { DialogSpec, state } from '../systems/GameState';
+import { RELICS, RelicDef } from '../data/relics';
+import { DialogSpec, ROLES, RoleDef, state } from '../systems/GameState';
+import { PlayerRole } from '../systems/SaveManager';
 import { TouchControls } from '../ui/TouchControls';
 
 function escapeHtml(s: string): string {
@@ -51,7 +54,8 @@ type ActivePanel =
   | 'chapter'
   | 'cert'
   | 'done'
-  | 'milestone';
+  | 'milestone'
+  | 'relic';
 
 /**
  * Gestochen scharfe HTML/CSS-Oberfläche über der 16-Bit-Spielwelt:
@@ -90,6 +94,8 @@ export class UIScene extends Phaser.Scene {
   private lexSelected = 'sippe';
   private milestoneQueue: string[] = [];
   private startSelectedChapter = 1;
+  private selectedRole: PlayerRole = state.playerRole;
+  private currentRelic: RelicDef | null = null;
   private bagTab: 'all' | 'tool' | 'food' | 'material' = 'all';
   private bagSelected: ItemId = 'faustkeil';
 
@@ -122,6 +128,7 @@ export class UIScene extends Phaser.Scene {
     state.on('openTrade', this.openTradeModal, this);
     state.on('openCertificate', this.openCertificateModal, this);
     state.on('milestone', this.enqueueMilestone, this);
+    state.on('openRelicQuiz', (relicOrId: RelicDef | string) => this.openRelicModal(relicOrId), this);
 
     const onVisChange = () => {
       if (document.hidden && !state.modal && this.activePanel === 'none' && !this.dialogEl.classList.contains('open')) {
@@ -463,6 +470,7 @@ export class UIScene extends Phaser.Scene {
     else if (this.activePanel === 'timeline') this.renderTimeline();
     else if (this.activePanel === 'chapter') this.renderChapterMenu();
     else if (this.activePanel === 'cert') this.renderCertificate();
+    else if (this.activePanel === 'relic' && this.currentRelic) this.renderRelicModal(this.currentRelic);
   }
 
   // ------------------------------------------------------------ Meilenstein Entdecker-Karten
@@ -1169,10 +1177,33 @@ export class UIScene extends Phaser.Scene {
           </button>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px;align-items:end;">
+        <div style="font-weight:900;font-size:15px;color:#5a2d0c;margin-top:14px;margin-bottom:6px;">
+          2. Wähle deine historische Spezialisierung (Rolle):
+        </div>
+        <div class="role-grid">
+          ${(Object.keys(ROLES) as PlayerRole[])
+            .map((rKey) => {
+              const r = ROLES[rKey];
+              const active = this.selectedRole === rKey;
+              return `
+                <button type="button" class="role-card ${active ? 'active' : ''}" data-pick-role="${rKey}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:24px;">${r.icon}</span>
+                    <span class="role-badge" style="background:${active ? '#b45309' : '#3a2410'};">${active ? '✓ Gewählt' : 'Wählen'}</span>
+                  </div>
+                  <div style="font-weight:900;font-size:14.5px;color:#5a2d0c;">${escapeHtml(r.name)}</div>
+                  <div style="font-size:12px;color:#6b533b;">${escapeHtml(r.desc)}</div>
+                  <div class="role-perk">⚡ ${escapeHtml(r.perk)}</div>
+                </button>
+              `;
+            })
+            .join('')}
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:14px;align-items:end;">
           <div>
             <label for="start-name-input" style="display:block;font-weight:900;font-size:14.5px;color:#5a2d0c;margin-bottom:4px;">
-              2. Wie heißt du? (Dein Vorname im Spiel & auf der Urkunde):
+              3. Wie heißt du? (Dein Vorname im Spiel & auf der Urkunde):
             </label>
             <input
               id="start-name-input"
@@ -1185,7 +1216,7 @@ export class UIScene extends Phaser.Scene {
           </div>
           <div>
             <div style="font-weight:900;font-size:14.5px;color:#5a2d0c;margin-bottom:4px;">
-              3. Start-Epoche wählen:
+              4. Start-Epoche wählen:
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">${chPills}</div>
           </div>
@@ -1196,18 +1227,25 @@ export class UIScene extends Phaser.Scene {
     this.modalFooterEl.style.justifyContent = 'space-between';
     this.modalFooterEl.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="font-weight:800;font-size:13px;color:#5a2d0c;">🔑 Hefter-Code (anderes iPad):</span>
+        <span style="font-weight:800;font-size:13px;color:#5a2d0c;">🔑 Hefter-Code (anderes Gerät):</span>
         <input
           id="start-code-input"
           type="text"
-          placeholder="z. B. MIA-W-K3-Q4"
-          style="padding:7px 10px;font-size:13.5px;font-weight:800;border:2px solid #8b5a2b;border-radius:7px;background:#fff;color:#2a1d10;width:165px;text-transform:uppercase;"
+          placeholder="z. B. STZ-MIA-W-J-K3-Q4"
+          style="padding:7px 10px;font-size:13.5px;font-weight:800;border:2px solid #8b5a2b;border-radius:7px;background:#fff;color:#2a1d10;width:185px;text-transform:uppercase;"
         />
         <button class="retro-btn" id="start-code-btn">📂 Code laden</button>
       </div>
-      <button class="retro-btn" id="start-go-btn" style="background:#3b5e2b;color:#fff;font-size:16px;padding:10px 22px;border-color:#86efac;">
-        🚀 Abenteuer in Kapitel ${this.startSelectedChapter} starten!
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${state.hasHadExistingSaveOnBoot ? `
+          <button class="retro-btn" id="start-resume-bottom-btn" style="background:#22c55e;color:#052e16;font-size:15px;padding:9px 16px;border-color:#bbf7d0;">
+            ▶️ Gespeicherten Stand weiterspielen (Kap. ${state.chapter})
+          </button>
+        ` : ''}
+        <button class="retro-btn" id="start-go-btn" style="background:#b45309;color:#fff;font-size:15px;padding:9px 18px;border-color:#fde68a;">
+          🚀 Neues Spiel starten (ab Kap. ${this.startSelectedChapter})
+        </button>
+      </div>
     `;
 
     const nameInput = this.modalBodyEl.querySelector('#start-name-input') as HTMLInputElement;
@@ -1221,7 +1259,16 @@ export class UIScene extends Phaser.Scene {
       btn.addEventListener('click', () => {
         syncNameFromInput();
         const g = (btn as HTMLElement).dataset.pickGender === 'male' ? 'male' : 'female';
-        state.setProfile(state.playerName, g);
+        state.setProfile(state.playerName, g, this.selectedRole);
+        this.renderStartModal();
+      });
+    });
+
+    this.modalBodyEl.querySelectorAll('[data-pick-role]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        syncNameFromInput();
+        this.selectedRole = ((btn as HTMLElement).dataset.pickRole as PlayerRole) ?? 'gatherer';
+        state.setProfile(state.playerName, state.playerGender, this.selectedRole);
         this.renderStartModal();
       });
     });
@@ -1234,40 +1281,146 @@ export class UIScene extends Phaser.Scene {
       });
     });
 
-    const resumeBtn = this.modalBodyEl.querySelector('#start-resume-btn');
-    if (resumeBtn) {
-      resumeBtn.addEventListener('click', () => {
-        syncNameFromInput();
-        state.setProfile(state.playerName, state.playerGender);
-        this.closePanels();
-        this.pushToast(`Willkommen zurück, ${state.playerName}!`);
-      });
-    }
+    const handleResume = () => {
+      syncNameFromInput();
+      state.setProfile(state.playerName, state.playerGender, this.selectedRole);
+      this.closePanels();
+      this.pushToast(`Willkommen zurück, ${state.playerName} (${ROLES[state.playerRole].name})!`);
+    };
+
+    const resumeBtnTop = this.modalBodyEl.querySelector('#start-resume-btn');
+    if (resumeBtnTop) resumeBtnTop.addEventListener('click', handleResume);
+
+    const resumeBtnBottom = this.modalFooterEl.querySelector('#start-resume-bottom-btn');
+    if (resumeBtnBottom) resumeBtnBottom.addEventListener('click', handleResume);
 
     this.modalFooterEl.querySelector('#start-go-btn')!.addEventListener('click', () => {
       syncNameFromInput();
-      state.setProfile(state.playerName, state.playerGender);
+      state.setProfile(state.playerName, state.playerGender, this.selectedRole);
       const targetCh = this.startSelectedChapter;
+      state.resetNewGame(targetCh);
       this.closePanels();
-      if (targetCh !== state.chapter || !state.hasHadExistingSaveOnBoot) {
-        state.startChapter(targetCh);
-      }
-      this.pushToast(`Auf ins Abenteuer, ${state.playerName}! Sprich mit Älteste Ota (E).`);
+      this.pushToast(`Neues Spiel ab Kapitel ${targetCh} gestartet! Willkommen, ${state.playerName} (${ROLES[state.playerRole].name})!`);
     });
 
     this.modalFooterEl.querySelector('#start-code-btn')!.addEventListener('click', () => {
       const codeInput = this.modalFooterEl.querySelector('#start-code-input') as HTMLInputElement;
       const raw = codeInput?.value.trim() ?? '';
       if (!raw) {
-        this.pushToast('Bitte gib zuerst deinen Hefter-Code ein (z. B. MIA-W-K3-Q4).');
+        this.pushToast('Bitte gib zuerst deinen Hefter-Code ein (z. B. STZ-MIA-W-J-K3-Q4).');
         return;
       }
       if (state.importCode(raw)) {
         this.closePanels();
         this.pushToast(`Spielstand geladen! Willkommen zurück, ${state.playerName} (Kapitel ${state.chapter})!`);
       } else {
-        this.pushToast('Code nicht erkannt. Format-Beispiel: MIA-W-K3-Q4');
+        this.pushToast('Code nicht erkannt. Format-Beispiel: STZ-MIA-W-J-K3-Q4-12M');
       }
+    });
+  }
+
+  // ------------------------------------------------------------ Relikt-Archäologie Modal
+
+  private openRelicModal(relicOrId: RelicDef | string): void {
+    const relic = typeof relicOrId === 'string' ? RELICS[relicOrId] : relicOrId;
+    if (!relic) return;
+    this.currentRelic = relic;
+    if (!state.relicsFound.includes(relic.id)) {
+      state.relicsFound.push(relic.id);
+      sfx.fanfare();
+      state.persist();
+    }
+    this.togglePanel('relic');
+  }
+
+  private renderRelicModal(relic: RelicDef): void {
+    this.modalCardEl.className = 'modal-card';
+    this.modalTitleEl.textContent = `🏺 Bedeutendes Urzeit-Relikt: ${relic.title}`;
+
+    const alreadyAnswered = state.relicQuizAnswered.includes(relic.id);
+
+    const optsHtml = relic.options
+      .map((opt, i) => {
+        return `
+          <button class="retro-btn relic-opt-btn" data-relic-opt="${i}" style="text-align:left;padding:10px 14px;font-size:14px;line-height:1.4;margin-bottom:6px;width:100%;">
+            <span class="key-badge">${String.fromCharCode(65 + i)}</span> ${escapeHtml(opt)}
+          </button>
+        `;
+      })
+      .join('');
+
+    this.modalBodyEl.innerHTML = `
+      <div style="background:linear-gradient(135deg,#362208 0%,#54350d 100%);border:2.5px solid #fbbf24;border-radius:10px;padding:14px 18px;color:#fff;margin-bottom:12px;display:flex;align-items:center;gap:16px;">
+        <div style="font-size:46px;line-height:1;background:#261806;border:2px solid #e8c170;border-radius:12px;width:68px;height:68px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${relic.icon}
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:900;text-transform:uppercase;color:#fde68a;letter-spacing:1px;">
+            Archäologischer Fund · ${escapeHtml(relic.epoch)}
+          </div>
+          <div style="font-size:20px;font-weight:900;color:#fff;margin:2px 0;">
+            ${escapeHtml(relic.title)}
+          </div>
+          <div style="font-size:12.5px;color:#fef3c7;">
+            📍 Fundort: ${escapeHtml(relic.locationHint)}
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fffdf7;border:2px solid #c29b61;border-radius:10px;padding:14px 16px;margin-bottom:12px;font-size:14.5px;color:#3b2310;line-height:1.5;">
+        <strong>Historischer Befund:</strong> ${escapeHtml(relic.lore)}
+      </div>
+
+      <div style="background:#fef3c7;border:2px solid #d97706;border-radius:10px;padding:14px 16px;">
+        <div style="font-weight:900;font-size:15px;color:#78350f;margin-bottom:8px;">
+          ❓ Archäologie-Rätsel: ${escapeHtml(relic.question)}
+        </div>
+        <div id="relic-options-container">${optsHtml}</div>
+        <div id="relic-feedback" style="display:${alreadyAnswered ? 'block' : 'none'};margin-top:10px;font-size:13.5px;font-weight:800;color:#166534;background:#dcfce7;border:1.5px solid #86efac;padding:8px 12px;border-radius:7px;">
+          ✓ ${escapeHtml(relic.explanation)}
+        </div>
+      </div>
+    `;
+
+    this.modalFooterEl.innerHTML = `
+      <div style="font-size:12.5px;color:#5a2d0c;font-weight:800;">
+        🏺 Bisher erforscht: ${state.relicsFound.length}/5 Relikten · Archäologen-Quiz gelöst: ${state.relicQuizAnswered.length}/5
+      </div>
+      <button class="retro-btn" id="relic-done-btn" style="background:#22c55e;color:#052e16;font-size:14px;padding:8px 16px;">
+        ✓ Fund dokumentieren & weiterforschen
+      </button>
+    `;
+
+    const feedbackEl = this.modalBodyEl.querySelector('#relic-feedback') as HTMLElement;
+    this.modalBodyEl.querySelectorAll('[data-relic-opt]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const optIdx = Number((btn as HTMLElement).dataset.relicOpt);
+        if (optIdx === relic.correct) {
+          (btn as HTMLElement).style.background = '#22c55e';
+          (btn as HTMLElement).style.color = '#fff';
+          if (!state.relicQuizAnswered.includes(relic.id)) {
+            state.relicQuizAnswered.push(relic.id);
+            sfx.fanfare();
+            state.persist();
+          }
+          feedbackEl.style.display = 'block';
+          feedbackEl.textContent = `✓ Richtig! ${relic.explanation}`;
+        } else {
+          (btn as HTMLElement).style.background = '#ef4444';
+          (btn as HTMLElement).style.color = '#fff';
+          feedbackEl.style.display = 'block';
+          feedbackEl.style.background = '#fee2e2';
+          feedbackEl.style.borderColor = '#fca5a5';
+          feedbackEl.style.color = '#991b1b';
+          feedbackEl.textContent = '✗ Leider nicht richtig. Lies den historischen Befund noch einmal aufmerksam!';
+          sfx.craft();
+        }
+      });
+    });
+
+    this.modalFooterEl.querySelector('#relic-done-btn')!.addEventListener('click', () => {
+      this.closePanels();
+      this.pushToast(`Relikt „${relic.title}“ erfolgreich in deiner Geschichtssammlung erfasst!`);
     });
   }
 
@@ -1316,6 +1469,13 @@ export class UIScene extends Phaser.Scene {
 
       <div class="stats-grid">
         <div class="stat-tile">
+          <div class="stat-icon">${ROLES[state.playerRole].icon}</div>
+          <div>
+            <div class="stat-val">${escapeHtml(ROLES[state.playerRole].name)}</div>
+            <div class="stat-lbl">${escapeHtml(ROLES[state.playerRole].perk)}</div>
+          </div>
+        </div>
+        <div class="stat-tile">
           <div class="stat-icon">⏱️</div>
           <div>
             <div class="stat-val">${escapeHtml(state.formatPlayTime())}</div>
@@ -1359,6 +1519,32 @@ export class UIScene extends Phaser.Scene {
         </div>
       </div>
 
+      <div style="background:#fffdf7;border:2px solid #c29b61;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="font-weight:900;font-size:14.5px;color:#5a2d0c;">
+            🏺 Urzeit-Relikte & Archäologie (${state.relicsFound.length} / 5 entdeckt):
+          </div>
+          <div style="font-size:12px;font-weight:800;color:${state.relicsFound.length === 5 ? '#15803d' : '#b45309'};">
+            ${state.relicsFound.length === 5 ? '🏅 Vollständig (S-Rang Siegel verliehen)!' : 'Suche in Höhlen & Bergen'}
+          </div>
+        </div>
+        <div class="relic-grid">
+          ${Object.values(RELICS).map((rel) => {
+            const found = state.relicsFound.includes(rel.id);
+            const answered = state.relicQuizAnswered.includes(rel.id);
+            return `
+              <div class="relic-card ${found ? 'found' : 'locked'}" title="${escapeHtml(rel.title)} (${escapeHtml(rel.epoch)})">
+                <span class="relic-icon-big">${found ? rel.icon : '❓'}</span>
+                <span class="relic-name">${escapeHtml(found ? rel.title : 'Unentdeckt')}</span>
+                <span style="font-size:10.5px;color:${answered ? '#15803d' : '#854d0e'};font-weight:700;">
+                  ${found ? (answered ? '✓ Erforscht' : 'Quiz offen') : 'Verborgen'}
+                </span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
       <div style="background:#fef3c7;border:2px solid #d97706;border-radius:10px;padding:12px 16px;margin-bottom:10px;">
         <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
           <div style="flex:1;min-width:240px;">
@@ -1378,7 +1564,7 @@ export class UIScene extends Phaser.Scene {
 
       <div style="background:#fffdf7;border:1.5px solid #c29b61;border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <strong style="font-size:13.5px;color:#5a2d0c;">🧑 Figur & Name anpassen:</strong>
+          <strong style="font-size:13.5px;color:#5a2d0c;">🧑 Figur & Rolle:</strong>
           <input
             id="pause-name-input"
             type="text"
@@ -1387,11 +1573,15 @@ export class UIScene extends Phaser.Scene {
             style="padding:5px 10px;font-size:14px;font-weight:800;border:1.5px solid #8b5a2b;border-radius:6px;width:150px;"
           />
           <button class="retro-btn" data-pause-gender="female" style="background:${state.playerGender === 'female' ? '#b45309' : '#3a2410'};">
-            👧 Frau (Jägerin)
+            👧 Frau
           </button>
           <button class="retro-btn" data-pause-gender="male" style="background:${state.playerGender === 'male' ? '#b45309' : '#3a2410'};">
-            👦 Mann (Jäger)
+            👦 Mann
           </button>
+          <span style="border-left:1.5px solid #d4c19c;height:22px;margin:0 4px;"></span>
+          <button class="retro-btn" data-pause-role="hunter" style="background:${state.playerRole === 'hunter' ? '#b45309' : '#3a2410'};">🏹 Jäger</button>
+          <button class="retro-btn" data-pause-role="gatherer" style="background:${state.playerRole === 'gatherer' ? '#b45309' : '#3a2410'};">🌿 Sammler</button>
+          <button class="retro-btn" data-pause-role="crafter" style="background:${state.playerRole === 'crafter' ? '#b45309' : '#3a2410'};">⚒️ Schmied</button>
           <button class="retro-btn" id="pause-save-profile">✓ Übernehmen</button>
         </div>
       </div>
@@ -1410,18 +1600,26 @@ export class UIScene extends Phaser.Scene {
       this.pushToast(`Hefter-Code kopiert: ${shortCode}`);
     });
 
-    const savePauseProfile = (gender: 'female' | 'male') => {
+    const savePauseProfile = (gender: 'female' | 'male', role?: PlayerRole) => {
       const inp = this.modalBodyEl.querySelector('#pause-name-input') as HTMLInputElement;
       const newName = inp?.value.trim() || state.playerName;
-      state.setProfile(newName, gender);
+      state.setProfile(newName, gender, role ?? state.playerRole);
+      this.selectedRole = state.playerRole;
       this.renderPauseModal();
-      this.pushToast(`Gespeichert: ${state.playerName} (${state.adventurerTitle()})`);
+      this.pushToast(`Gespeichert: ${state.playerName} (${state.roleSpecialistTitle()})`);
     };
 
     this.modalBodyEl.querySelectorAll('[data-pause-gender]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const g = (btn as HTMLElement).dataset.pauseGender === 'male' ? 'male' : 'female';
         savePauseProfile(g);
+      });
+    });
+
+    this.modalBodyEl.querySelectorAll('[data-pause-role]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const r = ((btn as HTMLElement).dataset.pauseRole as PlayerRole) || 'gatherer';
+        savePauseProfile(state.playerGender, r);
       });
     });
 
@@ -1578,11 +1776,23 @@ export class UIScene extends Phaser.Scene {
         </div>
 
         <div class="grid-2col" style="margin-bottom:12px;font-size:14px;">
+          <div>🎖️ <strong>Spezialisierung:</strong> ${escapeHtml(state.roleSpecialistTitle())} (${escapeHtml(ROLES[state.playerRole].name)})</div>
           <div>📖 <strong>Entdecktes Lexikon-Wissen:</strong> ${lexCount} von ${lexTotal} Einträgen (${state.knowledge}%)</div>
           <div>🏠 <strong>Dorf-Bauwerke (${bldCount}/${BUILDINGS.length}):</strong> ${escapeHtml(builtNames)}</div>
           <div>🐾 <strong>Begleiter & Herde:</strong> ${state.wolfTamed ? 'Hütehund Lupo' : '–'}, ${state.goatsTamed}× gezähmte Ziege(n)</div>
-          <div>👣 <strong>Zurückgelegte Strecke:</strong> ${Math.round(state.distanceMeters)} m · 🎯 <strong>Quiz-Fehlversuche:</strong> ${state.quizAttempts}</div>
+          <div>🏺 <strong>Urzeit-Relikte:</strong> ${state.relicsFound.length}/5 gehoben (${state.relicQuizAnswered.length}/5 erforscht)</div>
+          <div>👣 <strong>Strecke:</strong> ${Math.round(state.distanceMeters)} m · 🎯 <strong>Quiz-Fehler:</strong> ${state.quizAttempts}</div>
         </div>
+
+        ${state.relicsFound.length === 5 && state.relicQuizAnswered.length === 5 ? `
+          <div style="background:linear-gradient(135deg,#78350f 0%,#b45309 100%);color:#fef3c7;border:2px solid #fde68a;border-radius:8px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;">
+            <span style="font-size:32px;">🏅</span>
+            <div>
+              <div style="font-weight:900;font-size:14px;color:#fff;">GOLDENES S-RANG ARCHÄOLOGEN-SIEGEL</div>
+              <div style="font-size:12px;color:#fde68a;">Alle 5 bedeutenden Relikte der Urzeit entdeckt und das historische Fachquiz fehlerfrei gemeistert!</div>
+            </div>
+          </div>
+        ` : ''}
 
         <div class="merksatz-box">
           <div style="font-weight:800;color:#7a3b10;margin-bottom:6px;">📒 Zusammenfassung & Hefter-Merksätze der gespielten Epochen:</div>

@@ -55,6 +55,23 @@ class SoundFX {
   click(): void {
     this.tone(600, 0.03, 'square', 0.05, 0);
   }
+
+  fanfare(): void {
+    [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((f, i) => this.tone(f, 0.16, 'square', 0.1, i * 0.1));
+  }
+
+  step(): void {
+    this.tone(180, 0.04, 'sine', 0.04, 0);
+  }
+
+  cave(): void {
+    this.tone(130, 0.3, 'triangle', 0.08, 0);
+  }
+
+  door(): void {
+    this.tone(220, 0.08, 'triangle', 0.08, 0);
+    this.tone(160, 0.14, 'triangle', 0.07, 0.06);
+  }
 }
 
 export const sfx = new SoundFX();
