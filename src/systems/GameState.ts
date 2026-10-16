@@ -246,6 +246,10 @@ class GameState extends Phaser.Events.EventEmitter {
     this.counts = {};
     this.fires = [];
     this.traps = [];
+    if (ch === 1) {
+      this.relicsFound = [];
+      this.relicQuizAnswered = [];
+    }
     this.startChapter(ch, true);
   }
 
@@ -271,6 +275,11 @@ class GameState extends Phaser.Events.EventEmitter {
     if (ch === 1 || isFresh) {
       this.fires = [];
       this.traps = [];
+    }
+
+    if (isFresh && ch === 1) {
+      this.relicsFound = [];
+      this.relicQuizAnswered = [];
     }
 
     this.unlockSilent(['sippe', 'nomaden']);

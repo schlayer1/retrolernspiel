@@ -131,6 +131,7 @@ export class WorldScene extends Phaser.Scene {
     state.on('craft', this.onCraft, this);
     state.on('chapterChanged', this.onChapterChanged, this);
     state.on('profileChanged', this.onProfileChanged, this);
+    state.on('relicFound', this.onRelicFound, this);
 
     this.events.on('sleep', () => {
       if (this.labelLayer) this.labelLayer.style.display = 'none';
@@ -143,6 +144,7 @@ export class WorldScene extends Phaser.Scene {
       state.off('craft', this.onCraft, this);
       state.off('chapterChanged', this.onChapterChanged, this);
       state.off('profileChanged', this.onProfileChanged, this);
+      state.off('relicFound', this.onRelicFound, this);
     });
     window.addEventListener('beforeunload', () => this.persist());
   }
@@ -159,6 +161,36 @@ export class WorldScene extends Phaser.Scene {
   private onChapterChanged(): void {
     this.persist();
     this.scene.restart();
+  }
+
+  private onRelicFound(relicId: string): void {
+    const kindMap: Record<string, Kind> = {
+      oetzi_dolch: 'relic_oetzi',
+      himmelsscheibe: 'relic_himmelsscheibe',
+    };
+    const targetKind = kindMap[relicId];
+    if (!targetKind) return;
+    const targetNode = this.nodes.find((n) => n.kind === targetKind);
+    if (targetNode) {
+      this.removeNode(targetNode);
+      if (state.hint && (state.hint.includes('freilegen') || state.hint.includes('bergen'))) {
+        state.hint = '';
+      }
+    }
+  }
+
+  private removeNode(n: Node): void {
+    if (n.label) {
+      n.label.el.remove();
+      this.domLabels = this.domLabels.filter((l) => l !== n.label);
+    }
+    n.bubble?.destroy();
+    n.glow?.destroy();
+    n.cropSprite?.destroy();
+    if (n.sprite) {
+      this.obstacles.remove(n.sprite, true, true);
+    }
+    this.nodes = this.nodes.filter((x) => x !== n);
   }
 
   // ---------------------------------------------------------------- Aufbau der Welt
@@ -412,14 +444,18 @@ export class WorldScene extends Phaser.Scene {
       });
     }
 
-    // 8. Urzeit-Relikte in der Oberwelt (echte 16-Bit-Grafiken)
-    const oetziNode = this.addNode('relic_oetzi', 'relic_oetzi', undefined, 210, 52, true);
-    oetziNode.sprite.setScale(0.35);
-    oetziNode.label = this.addLabel(210, 34, '🗡️ Ötzis Kupferdolch', '#fbbf24');
+    // 8. Urzeit-Relikte in der Oberwelt (echte 16-Bit-Grafiken, verschwinden nach Bergung)
+    if (!state.relicsFound.includes('oetzi_dolch')) {
+      const oetziNode = this.addNode('relic_oetzi', 'relic_oetzi', undefined, 210, 52, true);
+      oetziNode.sprite.setScale(0.35);
+      oetziNode.label = this.addLabel(210, 34, '🗡️ Ötzis Kupferdolch', '#fbbf24');
+    }
 
-    const nebraNode = this.addNode('relic_himmelsscheibe', 'relic_nebra', undefined, 540, 360, true);
-    nebraNode.sprite.setScale(0.75);
-    nebraNode.label = this.addLabel(540, 342, '✨ Himmelsscheibe von Nebra', '#38bdf8');
+    if (!state.relicsFound.includes('himmelsscheibe')) {
+      const nebraNode = this.addNode('relic_himmelsscheibe', 'relic_nebra', undefined, 540, 360, true);
+      nebraNode.sprite.setScale(0.75);
+      nebraNode.label = this.addLabel(540, 342, '✨ Himmelsscheibe von Nebra', '#38bdf8');
+    }
   }
 
   private applyBuiltVisual(n: Node, b: BuildingDef): void {
@@ -1040,10 +1076,14 @@ export class WorldScene extends Phaser.Scene {
       }
       case 'relic_oetzi': {
         state.emit('openRelicQuiz', 'oetzi_dolch');
+        state.hint = '';
+        this.removeNode(n);
         break;
       }
       case 'relic_himmelsscheibe': {
         state.emit('openRelicQuiz', 'himmelsscheibe');
+        state.hint = '';
+        this.removeNode(n);
         break;
       }
       case 'copper_vein': {
@@ -1313,9 +1353,7 @@ export class WorldScene extends Phaser.Scene {
     state.add('fell', amt);
     state.unlock('falle');
     state.traps = state.traps.filter((t) => t !== n.placed);
-    n.bubble?.destroy();
-    n.sprite.destroy();
-    this.nodes = this.nodes.filter((x) => x !== n);
+    this.removeNode(n);
     state.emit('toast', `+${amt} Fleisch, +${amt} Fell${state.trapYieldMultiplier > 1 ? ' (🏹 Jäger-Bonus!)' : ''}`);
     state.bump('meat', amt);
   }

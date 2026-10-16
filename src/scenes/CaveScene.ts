@@ -56,6 +56,11 @@ export class CaveScene extends Phaser.Scene {
     this.domLabels = [];
     this.obstacles = this.physics.add.staticGroup();
 
+    state.on('relicFound', this.onRelicFound, this);
+    this.events.once('shutdown', () => {
+      state.off('relicFound', this.onRelicFound, this);
+    });
+
     // 1. Retina-DOM-Label-Layer initialisieren
     const wl = document.getElementById('world-labels');
     if (wl) wl.style.display = 'none';
@@ -180,6 +185,27 @@ export class CaveScene extends Phaser.Scene {
     };
     this.domLabels.push(lbl);
     return lbl;
+  }
+
+  private onRelicFound(relicId: string): void {
+    const targetNode = this.nodes.find((n) => n.kind === `relic_${relicId}`);
+    if (targetNode) {
+      this.removeNode(targetNode, relicId === 'malerei');
+      state.hint = '';
+    }
+  }
+
+  private removeNode(n: CaveNode, keepSprite = false): void {
+    if (n.label) {
+      n.label.el.remove();
+      this.domLabels = this.domLabels.filter((l) => l !== n.label);
+    }
+    if (!keepSprite) {
+      n.sprite.destroy();
+    } else {
+      (n.sprite as Phaser.GameObjects.Image).setAlpha(0.85);
+    }
+    this.nodes = this.nodes.filter((x) => x !== n);
   }
 
   private syncLabels(): void {
@@ -349,36 +375,44 @@ export class CaveScene extends Phaser.Scene {
       label: this.addLabel(190, 60, 'Feuerstein', '#e2e8f0'),
     });
 
-    // 3. Relikte in der Höhle
-    const malereiSpr = this.add.image(270, 48, 'relic_malerei').setDepth(60);
-    this.nodes.push({
-      kind: 'relic_malerei',
-      x: 270,
-      y: 48,
-      hint: 'Urzeitliche Wandmalerei erforschen',
-      sprite: malereiSpr,
-      label: this.addLabel(270, 28, 'Wandmalerei', '#f43f5e'),
-    });
+    // 3. Relikte in der Höhle (verschwinden nach erfolgreicher Bergung)
+    if (!state.relicsFound.includes('malerei')) {
+      const malereiSpr = this.add.image(270, 48, 'relic_malerei').setDepth(60);
+      this.nodes.push({
+        kind: 'relic_malerei',
+        x: 270,
+        y: 48,
+        hint: 'Urzeitliche Wandmalerei erforschen',
+        sprite: malereiSpr,
+        label: this.addLabel(270, 28, 'Wandmalerei', '#f43f5e'),
+      });
+    } else {
+      this.add.image(270, 48, 'relic_malerei').setDepth(60).setAlpha(0.85);
+    }
 
-    const venusSpr = this.add.image(65, 95, 'relic_venus').setDepth(60);
-    this.nodes.push({
-      kind: 'relic_venus',
-      x: 65,
-      y: 95,
-      hint: 'Venus vom Hohle Fels untersuchen',
-      sprite: venusSpr,
-      label: this.addLabel(65, 75, 'Venus-Statue', '#fbbf24'),
-    });
+    if (!state.relicsFound.includes('venus')) {
+      const venusSpr = this.add.image(65, 95, 'relic_venus').setDepth(60);
+      this.nodes.push({
+        kind: 'relic_venus',
+        x: 65,
+        y: 95,
+        hint: 'Venus vom Hohle Fels untersuchen',
+        sprite: venusSpr,
+        label: this.addLabel(65, 75, 'Venus-Statue', '#fbbf24'),
+      });
+    }
 
-    const loewenSpr = this.add.image(440, 65, 'relic_loewenmensch').setDepth(60);
-    this.nodes.push({
-      kind: 'relic_loewenmensch',
-      x: 440,
-      y: 65,
-      hint: 'Löwenmensch-Relikt untersuchen',
-      sprite: loewenSpr,
-      label: this.addLabel(440, 45, 'Der Löwenmensch', '#eab308'),
-    });
+    if (!state.relicsFound.includes('loewenmensch')) {
+      const loewenSpr = this.add.image(440, 65, 'relic_loewenmensch').setDepth(60);
+      this.nodes.push({
+        kind: 'relic_loewenmensch',
+        x: 440,
+        y: 65,
+        hint: 'Löwenmensch-Relikt untersuchen',
+        sprite: loewenSpr,
+        label: this.addLabel(440, 45, 'Der Löwenmensch', '#eab308'),
+      });
+    }
   }
 
   private checkInteractions(): void {
@@ -468,10 +502,16 @@ export class CaveScene extends Phaser.Scene {
       sfx.pickup();
     } else if (n.kind === 'relic_malerei') {
       state.emit('openRelicQuiz', 'malerei');
+      state.hint = '';
+      this.removeNode(n, true);
     } else if (n.kind === 'relic_venus') {
       state.emit('openRelicQuiz', 'venus');
+      state.hint = '';
+      this.removeNode(n, false);
     } else if (n.kind === 'relic_loewenmensch') {
       state.emit('openRelicQuiz', 'loewenmensch');
+      state.hint = '';
+      this.removeNode(n, false);
     }
   }
 

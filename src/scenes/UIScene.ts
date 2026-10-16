@@ -1329,6 +1329,7 @@ export class UIScene extends Phaser.Scene {
       state.relicsFound.push(relic.id);
       sfx.fanfare();
       state.persist();
+      state.emit('relicFound', relic.id);
     }
     this.togglePanel('relic');
   }
