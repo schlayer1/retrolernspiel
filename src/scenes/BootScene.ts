@@ -169,8 +169,10 @@ export class BootScene extends Phaser.Scene {
     this.load.image('prop_mammoth_skull', 'assets/props/mammoth_skull.png');
     this.load.image('prop_pots_group', 'assets/props/pots_group.png');
 
-    // Neue Feldbau-Stufen (hochauflösend & detailreich)
+    // Neue Feldbau-Stufen (konsistente 16-Bit-Grafiken aus farm-2)
+    this.load.image('farm_soil_raw', 'assets/props/farm_soil_raw.png');
     this.load.image('farm_soil_dry', 'assets/props/farm_soil_dry.png');
+    this.load.image('farm_soil_seeded', 'assets/props/farm_soil_seeded.png');
     this.load.image('farm_soil_wet', 'assets/props/farm_soil_wet.png');
     this.load.image('farm_wheat_sprout', 'assets/props/farm_wheat_sprout.png');
     this.load.image('farm_wheat_ripe', 'assets/props/farm_wheat_ripe.png');

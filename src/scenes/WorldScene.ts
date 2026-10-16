@@ -802,10 +802,10 @@ export class WorldScene extends Phaser.Scene {
         const row = Math.floor(idx / 3);
         const px = 495 + col * 24;
         const py = 248 + row * 24;
-        const n = this.addNode('plot', 'farm', 'soil_raw', px, py, false);
+        const n = this.addNode('plot', 'farm_soil_raw', undefined, px, py, false);
         n.plotId = p.id;
         n.sprite.setDepth(2);
-        n.cropSprite = this.add.image(px, py - 4, 'farm', 'wheat_seed').setDepth(py + 6).setVisible(false);
+        n.sprite.setDisplaySize(24, 24);
         this.refreshPlotVisual(n, p);
       });
       this.addLabel(519, 232, 'Ackerfeld');
@@ -1106,22 +1106,20 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private refreshPlotVisual(n: Node, p: FarmPlotState): void {
-    if (!n.cropSprite) return;
+    if (!p) return;
+    if (n.cropSprite) n.cropSprite.setVisible(false);
+
     if (p.stage === 'raw') {
-      n.sprite.setTexture('farm', 'soil_raw').setAlpha(0.75);
-      n.cropSprite.setVisible(false);
+      n.sprite.setTexture('farm_soil_raw').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
     } else if (p.stage === 'tilled') {
-      n.sprite.setTexture('farm_soil_dry').setAlpha(1);
-      n.cropSprite.setVisible(false);
+      n.sprite.setTexture('farm_soil_dry').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
     } else if (p.stage === 'seeded') {
-      n.sprite.setTexture('farm_soil_dry').setAlpha(1);
-      n.cropSprite.setTexture('farm', 'wheat_seed').setPosition(n.sprite.x, n.sprite.y).setVisible(true);
+      n.sprite.setTexture('farm_soil_seeded').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
     } else if (p.stage === 'watered') {
-      n.sprite.setTexture('farm_soil_wet').setAlpha(1);
-      n.cropSprite.setTexture('farm_wheat_sprout').setPosition(n.sprite.x, n.sprite.y - 2).setVisible(true);
+      n.sprite.setTexture('farm_soil_wet').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
     } else if (p.stage === 'ripe') {
-      n.sprite.setTexture('farm_soil_dry').setAlpha(1);
-      n.cropSprite.setTexture('farm_wheat_ripe').setPosition(n.sprite.x, n.sprite.y - 6).setVisible(true);
+      // Reifer Weizen wächst stolz aus der Erde hervor (48x54 nativ -> 24x27 im Spiel)
+      n.sprite.setTexture('farm_wheat_ripe').setDisplaySize(24, 27).setOrigin(0.5, 0.56).setAlpha(1);
     }
   }
 
