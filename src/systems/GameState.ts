@@ -50,6 +50,7 @@ class GameState extends Phaser.Events.EventEmitter {
   modal = false;
   lastModalClose = 0;
   hint = '';
+  compassText = '';
   touch?: { vector: Phaser.Math.Vector2; consumeAction(): boolean };
 
   readonly saves = new SaveManager();
@@ -128,9 +129,12 @@ class GameState extends Phaser.Events.EventEmitter {
   unlock(id: string): void {
     if (this.lexicon.includes(id) || !LEXICON[id]) return;
     this.lexicon.push(id);
-    this.knowledge = Math.min(100, this.knowledge + 5);
+    this.knowledge = Math.min(100, Math.round((this.lexicon.length / Object.keys(LEXICON).length) * 100));
     this.emit('lexicon', id);
     this.emit('toast', `Neu im Lexikon: ${LEXICON[id].title}`);
+    if (LEXICON[id].milestone) {
+      this.emit('milestone', id);
+    }
   }
 
   setQuest(n: number): void {
@@ -140,14 +144,23 @@ class GameState extends Phaser.Events.EventEmitter {
     this.checkQuest();
   }
 
+  unlockSilent(ids: string[]): void {
+    for (const id of ids) {
+      if (LEXICON[id] && !this.lexicon.includes(id)) this.lexicon.push(id);
+    }
+    this.knowledge = Math.min(100, Math.round((this.lexicon.length / Object.keys(LEXICON).length) * 100));
+  }
+
   /** Wechselt in ein neues Kapitel (über Ota oder über den Kapitel-Umschalter). */
   startChapter(ch: number): void {
     if (!CHAPTERS[ch]) return;
     this.chapter = ch;
     this.quest = 0;
+    this.unlockSilent(['sippe', 'nomaden']);
     // Sinnvolle Grundausstattung, falls direkt in ein höheres Kapitel gesprungen wird
-    if (ch >= 2 && this.fires.length === 0) {
-      this.fires.push({ x: 418, y: 296, t: Date.now() });
+    if (ch >= 2) {
+      if (this.fires.length === 0) this.fires.push({ x: 418, y: 296, t: Date.now() });
+      this.unlockSilent(['sammeln', 'feuer', 'falle', 'braten', 'faustkeil', 'klimawandel']);
     }
     if (ch >= 3) {
       this.wolfTamed = true;
@@ -155,6 +168,7 @@ class GameState extends Phaser.Events.EventEmitter {
       if (this.count('sichel') === 0) this.inventory.sichel = 1;
       if (this.count('tontopf') === 0 && this.count('wasser') === 0) this.inventory.tontopf = 1;
       if (this.count('getreide') < 2) this.inventory.getreide = 2;
+      this.unlockSilent(['wolf', 'wildkorn', 'keramik', 'ackerbau']);
     }
     if (ch >= 4) {
       this.ensureBuilding('toepferofen');
@@ -164,15 +178,18 @@ class GameState extends Phaser.Events.EventEmitter {
       if (this.goatsTamed < 1) this.goatsTamed = 1;
       if (this.count('wolle') < 2) this.inventory.wolle = 2;
       if (this.count('getreide') < 3) this.inventory.getreide = 3;
+      this.unlockSilent(['domestizierung', 'langhaus', 'arbeitsteilung', 'tauschhandel']);
     }
     if (ch >= 5) {
       this.ensureBuilding('webstuhl');
       if (this.count('stoff') < 1) this.inventory.stoff = 1;
+      this.unlockSilent(['weben', 'salz', 'bernstein', 'bergbau', 'kupfer']);
     }
     if (ch >= 6) {
       this.ensureBuilding('schmelzofen');
       if (this.count('spitzhacke') === 0) this.inventory.spitzhacke = 1;
       if (this.count('kupferbeil') === 0) this.inventory.kupferbeil = 1;
+      this.unlockSilent(['oetzi', 'bronze']);
     }
     sfx.quest();
     this.emit('chapterChanged', ch);

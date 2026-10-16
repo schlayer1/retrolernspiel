@@ -35,6 +35,15 @@ type Kind =
   | 'copper_vein'
   | 'iron_vein';
 
+interface DomLabel {
+  x: number;
+  y: number;
+  el: HTMLElement;
+  setText(t: string): DomLabel;
+  setY(ny: number): DomLabel;
+  setPosition(nx: number, ny: number): DomLabel;
+}
+
 interface Node {
   kind: Kind;
   sprite: Phaser.Physics.Arcade.Sprite;
@@ -45,7 +54,7 @@ interface Node {
   plotId?: number;
   cropSprite?: Phaser.GameObjects.Image;
   buildingDef?: BuildingDef;
-  label?: Phaser.GameObjects.Text;
+  label?: DomLabel;
 }
 
 /** Zusammenhängende, mitwachsende Spielwelt für alle 6 Kapitel (Altsteinzeit bis Eisenzeit). */
@@ -56,6 +65,8 @@ export class WorldScene extends Phaser.Scene {
   private facing: Dir = 'down';
   private obstacles!: Phaser.Physics.Arcade.StaticGroup;
   private nodes: Node[] = [];
+  private domLabels: DomLabel[] = [];
+  private labelLayer!: HTMLElement;
   private nightOverlay!: Phaser.GameObjects.Rectangle;
   private saveTimer = 0;
   private sleeping = false;
@@ -67,7 +78,15 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     this.nodes = [];
+    this.domLabels = [];
     this.sleeping = false;
+
+    const existingLayer = document.getElementById('world-labels');
+    this.labelLayer = existingLayer ?? document.createElement('div');
+    this.labelLayer.id = 'world-labels';
+    if (!existingLayer) document.body.appendChild(this.labelLayer);
+    this.labelLayer.innerHTML = '';
+
     const saved = state.saves.load();
     if (saved) state.loadFrom(saved);
 
@@ -198,11 +217,32 @@ export class WorldScene extends Phaser.Scene {
     return node;
   }
 
-  private addLabel(x: number, y: number, text: string, color = '#ffe9b0'): Phaser.GameObjects.Text {
-    return this.add
-      .text(x, y, text, { fontFamily: 'monospace', fontSize: '8px', color, stroke: '#1a1208', strokeThickness: 2 })
-      .setOrigin(0.5)
-      .setDepth(5000);
+  private addLabel(x: number, y: number, text: string, color = '#ffe9b0'): DomLabel {
+    const el = document.createElement('div');
+    el.className = 'world-label';
+    el.style.color = color;
+    el.textContent = text;
+    this.labelLayer.appendChild(el);
+    const lbl: DomLabel = {
+      x,
+      y,
+      el,
+      setText(t: string) {
+        el.textContent = t;
+        return lbl;
+      },
+      setY(ny: number) {
+        lbl.y = ny;
+        return lbl;
+      },
+      setPosition(nx: number, ny: number) {
+        lbl.x = nx;
+        lbl.y = ny;
+        return lbl;
+      },
+    };
+    this.domLabels.push(lbl);
+    return lbl;
   }
 
   /** Sammelstellen für alle Kapitel. */
@@ -460,6 +500,7 @@ export class WorldScene extends Phaser.Scene {
 
   update(_t: number, delta: number): void {
     this.updateTime(delta);
+    this.syncWorldLabels();
 
     if (state.modal || this.sleeping) {
       this.player.setVelocity(0, 0);
@@ -493,6 +534,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateNodes();
     const target = this.nearest();
     state.hint = target ? this.hintFor(target) : '';
+    this.updateCompass();
 
     const pressed =
       Phaser.Input.Keyboard.JustDown(this.wasd.E) ||
@@ -505,6 +547,188 @@ export class WorldScene extends Phaser.Scene {
       this.saveTimer = 0;
       this.persist();
     }
+  }
+
+  private updateCompass(): void {
+    const ch = state.chapter;
+    const q = state.quest;
+    const findKind = (k: Kind, bId?: BuildingId): Node | undefined => {
+      const candidates = this.nodes.filter(
+        (n) => n.kind === k && (!bId || n.buildingDef?.id === bId) && Date.now() >= n.readyAt,
+      );
+      if (candidates.length === 0) return this.nodes.find((n) => n.kind === k && (!bId || n.buildingDef?.id === bId));
+      return candidates.reduce((best, cur) =>
+        Phaser.Math.Distance.Between(this.player.x, this.player.y, cur.sprite.x, cur.sprite.y) <
+        Phaser.Math.Distance.Between(this.player.x, this.player.y, best.sprite.x, best.sprite.y)
+          ? cur
+          : best,
+      );
+    };
+
+    let targetNode: Node | undefined;
+    let label = '';
+
+    if (q === 0 || state.isReadyForQuiz() || state.isChapterComplete()) {
+      targetNode = findKind('ota');
+      label = 'Älteste Ota';
+    } else if (ch === 1) {
+      if (q === 1) {
+        targetNode = findKind('berry');
+        label = 'Beerenstrauch';
+      } else if (q === 2) {
+        if (state.count('stock') >= 3 && state.count('stein') >= 2) {
+          state.compassText = '🔨 Drücke C -> Lagerfeuer bauen!';
+          return;
+        }
+        targetNode = state.count('stock') < 3 ? findKind('stump') : findKind('rock');
+        label = state.count('stock') < 3 ? 'Baumstumpf (Stöcke)' : 'Felsen (Steine)';
+      } else if (q === 3) {
+        if (state.count('stock') >= 3) {
+          state.compassText = '🔨 Drücke C -> Falle bauen!';
+          return;
+        }
+        targetNode = findKind('stump');
+        label = 'Baumstumpf (Stöcke)';
+      } else if (q === 4) {
+        targetNode = findKind('trap');
+        label = 'Gestellte Falle';
+      } else if (q === 5) {
+        targetNode = findKind('fire');
+        label = 'Lagerfeuer';
+      } else if (q === 6) {
+        if (state.count('stein') >= 2) {
+          state.compassText = '🔨 Drücke C -> Faustkeil herstellen!';
+          return;
+        }
+        targetNode = findKind('rock');
+        label = 'Felsen (Steine)';
+      }
+    } else if (ch === 2) {
+      if (q === 1) {
+        targetNode = findKind('wolf');
+        label = 'Scheuer Wolf (Westen)';
+      } else if (q === 2) {
+        targetNode = findKind('wildgrain');
+        label = 'Wildkorn am See';
+      } else if (q === 3) {
+        state.compassText = '🔨 Sammle 2 Stöcke & 2 Steine -> Drücke C (Steinhacke)';
+        return;
+      } else if (q === 4) {
+        targetNode = findKind('clay');
+        label = 'Lehm am Seeufer';
+      } else if (q === 5) {
+        const needsWater = state.plots.some((p) => p.stage === 'seeded') && state.count('wasser') === 0;
+        targetNode = needsWater ? findKind('water_spot') : findKind('plot');
+        label = needsWater ? 'Wasserstelle am See' : 'Ackerfeld am See';
+      } else if (q === 6) {
+        targetNode = findKind('plot');
+        label = 'Ackerfeld (mit Sichel ernten)';
+      }
+    } else if (ch === 3) {
+      if (q === 1) {
+        targetNode = findKind('build_site', 'toepferofen');
+        label = 'Bauplatz: Töpferofen';
+      } else if (q === 2) {
+        targetNode = findKind('build_site', 'gehege');
+        label = 'Bauplatz: Tiergehege';
+      } else if (q === 3) {
+        targetNode = findKind('wild_goat');
+        label = 'Wildziege (Südosten)';
+      } else if (q === 4) {
+        targetNode = findKind('tamed_goat');
+        label = 'Zahme Ziege im Gehege';
+      } else if (q === 5) {
+        if (!state.hasBuilding('speicher')) {
+          targetNode = findKind('build_site', 'speicher');
+          label = 'Bauplatz: Vorratsspeicher';
+        } else {
+          state.compassText = '🥖 Drücke C -> Fladenbrot backen!';
+          return;
+        }
+      } else if (q === 6) {
+        targetNode = findKind('build_site', 'langhaus');
+        label = 'Bauplatz: Langhaus';
+      }
+    } else if (ch === 4) {
+      if (q === 1) {
+        targetNode = findKind('build_site', 'webstuhl');
+        label = 'Bauplatz: Webstuhl';
+      } else if (q === 2) {
+        targetNode = findKind('tamed_goat');
+        label = 'Zahme Ziege im Gehege';
+      } else if (q === 3) {
+        state.compassText = '🧶 Drücke C -> Gewebten Stoff herstellen!';
+        return;
+      } else {
+        targetNode = findKind('merchant');
+        label = 'Fernhändler Enki (Süden)';
+      }
+    } else if (ch === 5) {
+      if (q === 1) {
+        state.compassText = '⛏️ Drücke C -> Spitzhacke herstellen!';
+        return;
+      } else if (q === 2) {
+        targetNode = findKind('build_site', 'schmelzofen');
+        label = 'Bauplatz: Schmelzofen';
+      } else if (q === 3) {
+        targetNode = findKind('copper_vein');
+        label = 'Kupfererz am Nord-Stollen';
+      } else if (q === 4) {
+        state.compassText = '🔥 Drücke C -> Kupfer schmelzen!';
+        return;
+      } else if (q === 5) {
+        state.compassText = '🪓 Drücke C -> Kupferbeil gießen!';
+        return;
+      }
+    } else if (ch === 6) {
+      if (q === 1) {
+        targetNode = findKind('merchant');
+        label = 'Fernhändler Enki (Zinnerz)';
+      } else if (q === 2) {
+        state.compassText = '⚔️ Drücke C -> Bronze legieren & Bronzeschwert gießen!';
+        return;
+      } else if (q === 3) {
+        targetNode = findKind('build_site', 'schmiede');
+        label = 'Bauplatz: Eisenschmiede';
+      } else if (q === 4) {
+        if (state.count('eisenerz') < 2) {
+          targetNode = findKind('iron_vein');
+          label = 'Eisenerz am Nord-Stollen';
+        } else {
+          state.compassText = '🔥 Drücke C -> Eisen verhütten!';
+          return;
+        }
+      } else if (q === 5) {
+        state.compassText = '⚒️ Drücke C -> Eisenwerkzeug schmieden!';
+        return;
+      }
+    }
+
+    if (!targetNode) {
+      state.compassText = '';
+      return;
+    }
+
+    const dx = targetNode.sprite.x - this.player.x;
+    const dy = targetNode.sprite.y - this.player.y;
+    const distPx = Math.hypot(dx, dy);
+    if (distPx < 32) {
+      state.compassText = `📍 Ziel direkt vor dir: ${label} (drücke E)`;
+      return;
+    }
+    const meters = Math.max(2, Math.round(distPx / 8));
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI); // -180..180, 0 = Ost, -90 = Nord, 90 = Süd
+    let dirStr = '→ Osten';
+    if (angle >= -112.5 && angle < -67.5) dirStr = '↑ Norden';
+    else if (angle >= -67.5 && angle < -22.5) dirStr = '↗ Nordosten';
+    else if (angle >= -22.5 && angle < 22.5) dirStr = '→ Osten';
+    else if (angle >= 22.5 && angle < 67.5) dirStr = '↘ Südosten';
+    else if (angle >= 67.5 && angle < 112.5) dirStr = '↓ Süden';
+    else if (angle >= 112.5 && angle < 157.5) dirStr = '↙ Südwesten';
+    else if (angle >= -157.5 && angle < -112.5) dirStr = '↖ Nordwesten';
+    else dirStr = '← Westen';
+
+    state.compassText = `🧭 ${label}: ${dirStr} (${meters} m)`;
   }
 
   private nightness(): number {
@@ -1100,6 +1324,29 @@ export class WorldScene extends Phaser.Scene {
       this.spawnTrap(p);
       state.bump('trap');
       state.emit('toast', 'Falle aufgestellt. Komm gleich wieder!');
+    }
+  }
+
+  private syncWorldLabels(): void {
+    const canvas = this.game.canvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const cam = this.cameras.main;
+    const hideAll = state.modal;
+    for (const lbl of this.domLabels) {
+      if (hideAll) {
+        lbl.el.style.display = 'none';
+        continue;
+      }
+      const sx = ((lbl.x - cam.scrollX) / cam.width) * rect.width + rect.left;
+      const sy = ((lbl.y - cam.scrollY) / cam.height) * rect.height + rect.top;
+      if (sx < rect.left + 20 || sx > rect.right - 20 || sy < rect.top + 15 || sy > rect.bottom - 15) {
+        lbl.el.style.display = 'none';
+      } else {
+        lbl.el.style.display = 'block';
+        lbl.el.style.left = `${sx}px`;
+        lbl.el.style.top = `${sy}px`;
+      }
     }
   }
 

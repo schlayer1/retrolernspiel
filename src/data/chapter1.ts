@@ -1,105 +1,327 @@
+import { ItemId } from './items';
+
 export interface LexiconEntry {
   title: string;
+  era: string;
+  icon: ItemId;
+  unlockHint: string;
+  milestone?: boolean;
   text: string;
 }
 
-/** „Hast du gewusst?“ – Alle 22 Einträge für Kapitel 1 bis 6 (Klasse 5/6). */
+/** Fachbegriffe, die in Texten für Schüler der 5./6. Klasse farbig hervorgehoben werden. */
+export const HIGHLIGHT_TERMS: string[] = [
+  'Altsteinzeit',
+  'Jungsteinzeit',
+  'Kupferzeit',
+  'Bronzezeit',
+  'Eisenzeit',
+  'Metallzeit',
+  'Sippe',
+  'Nomaden',
+  'Sesshaftwerdung',
+  'sesshaft',
+  'Neolithische Revolution',
+  'Faustkeil',
+  'Feuerstein',
+  'Domestizierung',
+  'Ackerbau',
+  'Viehzucht',
+  'Einkorn',
+  'Emmer',
+  'Keramik',
+  'Langhaus',
+  'Arbeitsteilung',
+  'Vorratshaltung',
+  'Überschuss',
+  'Tauschhandel',
+  'Weißes Gold',
+  'Bernstein',
+  'Kupfererz',
+  'Kupferbeil',
+  'Ötzi',
+  'Legierung',
+  'Bronze',
+  'Zinn',
+  'Zinnerz',
+  'Eisenerz',
+  'Rennofen',
+];
+
+/** „Hast du gewusst?“ – Alle 27 illustrierten Facheinträge für Kapitel 1 bis 6 (Klasse 5/6). */
 export const LEXICON: Record<string, LexiconEntry> = {
   sippe: {
     title: 'Die Sippe',
-    text: 'Jäger und Sammler lebten in kleinen Gruppen von etwa 20 bis 40 Menschen. Man nennt so eine Gruppe Sippe. Alle halfen mit und teilten das Essen.',
+    era: 'Altsteinzeit',
+    icon: 'beere',
+    unlockHint: 'Sprich zu Beginn von Kapitel 1 mit der Ältesten Ota (E).',
+    text: 'Jäger und Sammler lebten in kleinen Familiengruppen von etwa 20 bis 40 Menschen. Man nennt so eine Gruppe Sippe. Alle halfen zusammen und teilten die Beute gerecht.',
   },
   nomaden: {
     title: 'Nomaden',
-    text: 'Menschen, die nicht dauerhaft an einem Ort wohnen, heißen Nomaden. In der Altsteinzeit zogen die Sippen den Tieren und den Jahreszeiten hinterher, weil die Nahrung an einem Ort irgendwann knapp wurde.',
+    era: 'Altsteinzeit',
+    icon: 'fell',
+    unlockHint: 'Sprich zu Beginn von Kapitel 1 mit der Ältesten Ota (E).',
+    milestone: true,
+    text: 'Menschen, die keinen festen Wohnort haben, heißen Nomaden. In der Altsteinzeit zogen die Sippen den Tierherden hinterher und wohnten in tragbaren Zelten aus Holzstangen und Tierfellen.',
   },
   sammeln: {
-    title: 'Sammeln',
-    text: 'Beeren, Wurzeln, Nüsse, Pilze und Kräuter waren wichtige Nahrung. Man musste genau wissen, welche Pflanzen essbar und welche giftig sind.',
+    title: 'Sammeln von Pflanzen',
+    era: 'Altsteinzeit',
+    icon: 'beere',
+    unlockHint: 'Pflücke Beeren an einem roten Beerenstrauch (E).',
+    text: 'Beeren, Wurzeln, Nüsse, Pilze und Wildkräuter sicherten das tägliche Überleben. Die Kinder lernten schon früh, welche Pflanzen essbar, heilend oder giftig waren.',
   },
   feuer: {
-    title: 'Das Feuer',
-    text: 'Feuer gab Wärme und Licht und hielt wilde Tiere fern. Außerdem konnte man darauf Essen zubereiten. Menschen nutzen Feuer schon seit mehr als 300.000 Jahren.',
+    title: 'Zähmung des Feuers',
+    era: 'Altsteinzeit',
+    icon: 'stock',
+    unlockHint: 'Baue im Handwerksmenü (C) ein Lagerfeuer aus 3 Stöcken und 2 Steinen.',
+    milestone: true,
+    text: 'Das Feuer spendete Wärme in der Eiszeit, Licht in der Dunkelheit und hielt Raubtiere wie Wölfe und Höhlenbären fern. Mit Feuerstein und Funken lernten die Menschen, selbst Feuer zu entfachen.',
   },
   falle: {
-    title: 'Fallen und Jagd',
-    text: 'Jäger nutzten Speere, Fallgruben und Schlingen. Oft jagte die ganze Gruppe gemeinsam. Tierfelle wurden zu Kleidung, Knochen zu Werkzeug.',
+    title: 'Jagd & Fallenbau',
+    era: 'Altsteinzeit',
+    icon: 'fleisch',
+    unlockHint: 'Stelle eine Falle auf (C) und leere sie, sobald sie ausgelöst hat (E).',
+    text: 'Die Jagd lieferte nicht nur energiereiches Fleisch: Aus den Fellen nähten die Menschen warme Kleidung, aus Sehnen drehten sie Schnüre und aus Knochen schnitzten sie Nadeln und Speerspitzen.',
   },
   braten: {
-    title: 'Essen braten',
-    text: 'Gebratenes Fleisch schmeckt nicht nur besser. Es ist auch leichter zu verdauen und länger haltbar als rohes Fleisch.',
+    title: 'Nahrung garen',
+    era: 'Altsteinzeit',
+    icon: 'gebraten',
+    unlockHint: 'Brate rohes Fleisch an einem brennenden Lagerfeuer (E).',
+    text: 'Gebratenes Fleisch ist viel leichter verdaulich als rohes Fleisch, enthält keine gefährlichen Keime mehr und gibt dem Körper mehr Energie.',
   },
   faustkeil: {
     title: 'Der Faustkeil',
-    text: 'Ein Faustkeil ist ein Werkzeug aus Stein, meist aus Feuerstein. Man konnte damit schneiden, schaben und graben. Die ältesten Steinwerkzeuge sind etwa 2,5 Millionen Jahre alt.',
+    era: 'Altsteinzeit',
+    icon: 'faustkeil',
+    unlockHint: 'Stelle im Handwerksmenü (C) einen Faustkeil aus 2 Steinen her.',
+    milestone: true,
+    text: 'Der Faustkeil war das „Taschenmesser der Altsteinzeit“. Durch Abschlagen von hartem Feuerstein entstand eine scharfe Kante zum Schneiden, Schaben, Hacken und Graben.',
   },
   nacht: {
-    title: 'Die Nacht',
-    text: 'Nachts waren die Menschen besonders in Gefahr. Am Lagerfeuer wärmten sie sich, hielten Wache und schliefen abwechselnd.',
+    title: 'Gefahren der Nacht',
+    era: 'Altsteinzeit',
+    icon: 'fell',
+    unlockHint: 'Bleibe nachts zum Schutz am wärmenden Lagerfeuer.',
+    text: 'Ohne feste Hauswände war die Nacht kalt und gefährlich. Die Sippe versammelte sich eng ums Lagerfeuer, erzählte Geschichten und hielt abwechselnd Wache.',
   },
   klimawandel: {
     title: 'Ende der Eiszeit',
-    text: 'Vor etwa 12.000 Jahren wurde das Klima wärmer. Das Eis schmolz, Wälder und wilde Getreidegräser wuchsen. Das veränderte das Leben der Menschen völlig.',
+    era: 'Übergang (ca. 10.000 v. Chr.)',
+    icon: 'samen',
+    unlockHint: 'Sprich zu Beginn von Kapitel 2 mit Ältester Ota (E).',
+    milestone: true,
+    text: 'Vor rund 12.000 Jahren erwärmte sich das Klima der Erde deutlich. Die riesigen Gletscher schmolzen, dichte Wälder und wilde Getreidegräser breiteten sich aus – der Startschuss für eine neue Lebensweise!',
   },
   wolf: {
     title: 'Vom Wolf zum Hund',
-    text: 'Der Wolf war das erste Tier, das der Mensch zähmte! Neugierige Wölfe fraßen Essensreste am Lagerfeuer. Daraus wurden treue Wach- und Jagdhunde.',
+    era: 'Übergang zur Jungsteinzeit',
+    icon: 'fleisch',
+    unlockHint: 'Füttere den scheuen Wolf im Westen mit 1× Fleisch (E).',
+    milestone: true,
+    text: 'Der Wolf war das allererste Haustier des Menschen! Weniger scheue Wölfe näherten sich den Lagerfeuern. Die Menschen zogen Wolfswelpen auf – so entstand der Hund als treuer Wächter und Jagdhelfer.',
   },
   wildkorn: {
     title: 'Urgetreide: Einkorn & Emmer',
-    text: 'Die Menschen beobachteten, dass aus heruntergefallenen Körnern neue Pflanzen wuchsen. Sie begannen, Wildgetreide wie Einkorn und Emmer gezielt selbst auszusäen.',
+    era: 'Jungsteinzeit',
+    icon: 'samen',
+    unlockHint: 'Sammle gelbe Wildkorn-Ähren südlich vom See (E).',
+    text: 'Im „Fruchtbaren Halbmond“ wuchsen wilde Getreidearten wie Einkorn und Emmer. Die Menschen erkannten: Wenn man die größten Körner in den Boden steckt und gießt, wächst im nächsten Jahr ein ganzes Feld!',
   },
   keramik: {
     title: 'Tontöpfe & Keramik',
-    text: 'Aus feuchtem Lehm vom Flussufer formten die Menschen Gefäße und brannten sie im Feuer. Darin konnten sie Wasser holen, kochen und Vorräte trocken lagern.',
+    era: 'Jungsteinzeit',
+    icon: 'tontopf',
+    unlockHint: 'Forme im Handwerksmenü (C) einen Tontopf aus 2× Lehm.',
+    milestone: true,
+    text: 'Für Nomaden waren schwere Tontöpfe unpraktisch. Doch sesshafte Bauern brannten feuchten Lehm im Töpferofen zu wasserfester Keramik, um Wasser zu tragen, Brei zu kochen und Korn vor Mäusen zu schützen.',
   },
   ackerbau: {
     title: 'Ackerbau & Erntesichel',
-    text: 'Mit Hacken aus Stein und Holz lockerten die Bauern den Boden. Reifes Getreide schnitten sie mit Sicheln, in die scharfe Feuerstein-Klingen eingesetzt waren.',
+    era: 'Jungsteinzeit',
+    icon: 'hacke',
+    unlockHint: 'Baue eine Steinhacke oder Erntesichel (C) und bestelle das Ackerfeld.',
+    milestone: true,
+    text: 'In der Jungsteinzeit wurden Steine nicht mehr nur grob behauen, sondern glatt geschliffen und durchbohrt! Mit der Steinhacke lockerte man den Boden, mit der Feuerstein-Sichel erntete man das Korn.',
   },
   domestizierung: {
-    title: 'Haustiere im Gehege',
-    text: 'Nach dem Hund zähmten die Menschen Schafe, Ziegen, Rinder und Schweine. So hatten sie immer Fleisch, Milch, Wolle und Leder – auch ohne gefährliche Jagd.',
+    title: 'Viehzucht (Domestizierung)',
+    era: 'Jungsteinzeit',
+    icon: 'milch',
+    unlockHint: 'Locke in Kapitel 3 eine Wildziege mit 1× Getreide ins Gehege (E).',
+    milestone: true,
+    text: 'Die Zähmung und Haltung von Wildtieren nennt man Domestizierung. Ziegen, Schafe, Rinder und Schweine lieferten im Gehege jederzeit frische Milch, Wolle und Fleisch.',
   },
   langhaus: {
-    title: 'Das Langhaus',
-    text: 'Wer Felder bestellt, muss vor Ort bleiben: Die Menschen wurden sesshaft! Sie bauten große Langhäuser aus dicken Holzpfosten, Flechtwerk und Lehmwänden.',
+    title: 'Sesshaftwerdung & Langhaus',
+    era: 'Jungsteinzeit',
+    icon: 'brot',
+    unlockHint: 'Errichte das große Langhaus am Bauplatz im Norden des Dorfes (E).',
+    milestone: true,
+    text: 'Wer Felder sät, muss bis zur Ernte bleiben: Die Menschen wurden sesshaft (Neolithische Revolution)! Sie bauten bis zu 30 Meter lange Häuser aus Eichenpfosten, Weidengeflecht und Lehm, in denen Mensch und Vieh unter einem Dach lebten.',
   },
   arbeitsteilung: {
-    title: 'Arbeitsteilung im Dorf',
-    text: 'Weil die Ernte genug Vorräte für alle lieferte, musste nicht mehr jeder den ganzen Tag Nahrung suchen. Einige wurden Töpfer, andere Hirten, Weber oder Bauleute.',
+    title: 'Arbeitsteilung & Vorräte',
+    era: 'Jungsteinzeit',
+    icon: 'tontopf',
+    unlockHint: 'Baue eine Werkstatt (Töpferofen, Gehege oder Speicher) im Dorf (E).',
+    milestone: true,
+    text: 'Durch Ackerbau und Vorratshaltung gab es Nahrungs-Überschüsse. Deshalb konnten sich Dorfbewohner auf Berufe spezialisieren: Töpferin, Hirte, Müllerin, Weberin oder Schmied. Das nennt man Arbeitsteilung!',
   },
-  webstuhl: {
-    title: 'Webstuhl & Kleidung',
-    text: 'In der Jungsteinzeit trugen die Menschen nicht mehr nur Felle. Am Gewichtswebstuhl spannten sie Fäden aus Schafwolle oder Flachs (Leinen) und webten luftige, warme Stoffe.',
+  weben: {
+    title: 'Gewichtswebstuhl & Kleidung',
+    era: 'Späte Jungsteinzeit',
+    icon: 'stoff',
+    unlockHint: 'Baue den Webstuhl (Kap. 4) oder webe Stoff aus 2× Wolle (C).',
+    milestone: true,
+    text: 'Am senkrechten Gewichtswebstuhl hielten gebrannte Tongewichte die Längsfäden straff. Aus Schaf- und Ziegenwolle oder Flachs webten die Menschen leichte, warme Stoffe statt schwerer Tierfelle.',
   },
   tauschhandel: {
     title: 'Tauschhandel ohne Geld',
-    text: 'Münzen gab es noch nicht! Wenn ein Dorf zu viel Getreide oder Stoff hatte, tauschte es diese Überschüsse mit Wanderhändlern gegen seltene Güter wie Salz, Feuerstein oder Bernstein.',
+    era: 'Späte Jungsteinzeit',
+    icon: 'salz',
+    unlockHint: 'Sprich ab Kapitel 4 mit Fernhändler Enki am Marktstand im Süden (E oder H).',
+    milestone: true,
+    text: 'Münzgeld wurde erst Jahrtausende später erfunden! In der Stein- und Bronzezeit galt der Tauschhandel (Ware gegen Ware): Eigene Überschüsse wie Getreide und Stoff wurden gegen seltene Güter aus der Ferne getauscht.',
+  },
+  salz: {
+    title: 'Salz – Das „Weiße Gold“',
+    era: 'Späte Jungsteinzeit',
+    icon: 'salz',
+    unlockHint: 'Tausche bei Fernhändler Enki (H) 1× Salz gegen 2× Getreide ein.',
+    text: 'Salz war lebenswichtig für Mensch und Tier. Vor allem aber konnte man Fleisch und Fisch mit Salz einreiben (pökeln) und so über viele Monate für den langen Winter haltbar machen!',
+  },
+  bernstein: {
+    title: 'Ostsee-Bernstein & Besitz',
+    era: 'Späte Jungsteinzeit',
+    icon: 'bernstein',
+    unlockHint: 'Tausche bei Fernhändler Enki (H) 1× Bernstein gegen 1× Stoff ein.',
+    milestone: true,
+    text: 'Bernstein ist versteinertes Baumharz von der Küste, das über Hunderte Kilometer weit gehandelt wurde. Mit solchem Schmuck und vollen Speichern entstanden Reichtum, persönlicher Besitz und erste Rangunterschiede.',
+  },
+  bergbau: {
+    title: 'Bergbau & Stollen',
+    era: 'Kupferzeit',
+    icon: 'spitzhacke',
+    unlockHint: 'Stelle eine Spitzhacke (C) her oder untersuche den Stollen im Norden (E).',
+    text: 'Mit Geweihhacken, Steinschlägeln und Feuersetzen gruben Bergleute tiefe Stollen in das Gestein – zuerst für besten Feuerstein und Salz, später für grünlich schimmerndes Kupfererz und Eisenerz.',
   },
   kupfer: {
-    title: 'Kupferzeit & Ötzi',
-    text: 'Vor rund 6.000 Jahren entdeckten Menschen glänzende Kupfererz-Steine. Im heißen Schmelzofen wurde flüssiges Metall daraus! Die Gletschermumie „Ötzi“ trug ein solches kostbares Kupferbeil.',
+    title: 'Kupfer schmelzen',
+    era: 'Kupferzeit (ab 4.000 v. Chr.)',
+    icon: 'kupfer',
+    unlockHint: 'Baue Kupfererz ab und schmelze im Menü (C) einen Kupferbarren.',
+    text: 'Kupfer war das erste Metall, das Menschen verarbeiteten! Mit Blasebälgen fachten sie das Feuer im Schmelzofen auf über 1.080 °C an, bis flüssiges, rot glänzendes Kupfer aus dem Erzgestein floss.',
+  },
+  oetzi: {
+    title: 'Ötzi & das Kupferbeil',
+    era: 'Kupferzeit (ca. 3.300 v. Chr.)',
+    icon: 'kupferbeil',
+    unlockHint: 'Gieße im Handwerksmenü (C) ein Kupferbeil.',
+    milestone: true,
+    text: '1991 fanden Wanderer in den Ötztaler Alpen die 5.300 Jahre alte Gletschermumie „Ötzi“. Sein wertvollster Besitz war ein Beil mit einer gegossenen Klinge aus fast reinem Kupfer! Bricht Metall, kann man es einfach neu einschmelzen.',
+  },
+  zinn: {
+    title: 'Zinnerz & Fernhandelswege',
+    era: 'Bronzezeit',
+    icon: 'zinn',
+    unlockHint: 'Tausche in Kapitel 6 seltenes Zinnerz bei Fernhändler Enki (H) ein.',
+    text: 'Um aus weichem Kupfer harte Bronze zu machen, brauchte man Zinnerz. Weil Zinn in Europa nur an wenigen Orten (z. B. in England oder im Erzgebirge) vorkam, umspannte ein riesiges Handelsnetz den ganzen Kontinent!',
   },
   bronze: {
-    title: 'Bronze: Kupfer + Zinn',
-    text: 'Reines Kupfer ist recht weich. Doch wenn man 9 Teile Kupfer mit 1 Teil Zinn zusammenschmilzt, entsteht Bronze! Weil Zinn selten war, entstanden Handelswege durch ganz Europa.',
+    title: 'Die Legierung Bronze',
+    era: 'Bronzezeit (ab 2.200 v. Chr.)',
+    icon: 'bronze',
+    unlockHint: 'Legiere im Menü (C) 1× Bronze aus 1× Kupfer und 1× Zinn.',
+    milestone: true,
+    text: 'Schmilzt man 9 Teile Kupfer und 1 Teil Zinn zusammen, entsteht eine Metallmischung (Legierung): goldglänzende Bronze! Sie ist viel härter als reines Kupfer und gab einer ganzen Epoche ihren Namen: der Bronzezeit.',
   },
-  eisenzeit: {
-    title: 'Die Eisenzeit',
-    text: 'Ab etwa 1.200 v. Chr. lernten Schmiede, in noch heißeren Rennöfen (über 1.500 °C) Eisenerz zu verhütten und auf dem Amboss zu schmieden. Eisenpflug und Eisenschwert veränderten die Welt.',
+  schwert: {
+    title: 'Bronzeschwert & Anführer',
+    era: 'Bronzezeit',
+    icon: 'bronzeschwert',
+    unlockHint: 'Gieße im Menü (C) ein Bronzeschwert.',
+    text: 'Erstmals konnten lange, scharfe Schwerter, Schilde und Schmuckscheiben in Stein- oder Tonformen gegossen werden. Wer Bronze besaß, hatte große Macht – Dörfer schützten sich nun mit Wällen und Palisaden.',
   },
-  besitz: {
-    title: 'Besitz & Häuptlinge',
-    text: 'Mit vollen Vorratsspeichern, kostbarem Bernstein und Metallwaffen entstand persönlicher Besitz. Manche Familien wurden reicher und mächtiger als andere – es entstanden Anführer und geschützte Siedlungen.',
+  eisen: {
+    title: 'Eisenzeit & Schmiedekunst',
+    era: 'Eisenzeit (ab 800 v. Chr.)',
+    icon: 'eisenwerkzeug',
+    unlockHint: 'Baue die Eisenschmiede, verhütte Eisenerz und schmiede Eisenwerkzeug (C).',
+    milestone: true,
+    text: 'Eisenerz gab es fast überall in heimischen Böden, aber es schmilzt erst bei über 1.500 °C! Im Rennofen gewannen Schmiede glühendes Eisen und hämmerten es auf dem Amboss zu extrem harten Pflugscharen, Äxten und Werkzeugen.',
   },
 };
+
+export interface EpochComparisonRow {
+  era: string;
+  chapter: number;
+  time: string;
+  housing: string;
+  food: string;
+  tools: string;
+  society: string;
+}
+
+/** Übersichtstabelle für das Vergleichs-Fenster (Z) – „Vom Jäger zum Schmied auf einen Blick“. */
+export const EPOCH_COMPARISON: EpochComparisonRow[] = [
+  {
+    era: 'Altsteinzeit',
+    chapter: 1,
+    time: 'ca. 2,5 Mio. – 10.000 v. Chr.',
+    housing: 'Nomaden (ziehen umher), Zelte aus Fellen & Ästen, Höhlen',
+    food: 'Jagen (Wild, Fallen) & Sammeln (Beeren, Nüsse, Wurzeln)',
+    tools: 'Grob geschlagene Steine (Faustkeil aus Feuerstein), Speere, Feuer',
+    society: 'Kleine Sippe (20–40 Personen), alle teilen alles, kaum Besitz',
+  },
+  {
+    era: 'Übergang / Klimawandel',
+    chapter: 2,
+    time: 'ca. 10.000 – 5.500 v. Chr.',
+    housing: 'Längere Rastplätze an Flüssen und Seen nach Ende der Eiszeit',
+    food: 'Erste Aussaat von Wildgetreide (Einkorn/Emmer), Jagd & Fischfang',
+    tools: 'Geschliffene Steinhacke, Erntesichel mit Feuersteinklingen, erste Tontöpfe',
+    society: 'Wolf wird als erstes Tier zum Hund gezähmt (Domestizierung)',
+  },
+  {
+    era: 'Jungsteinzeit',
+    chapter: 3,
+    time: 'ca. 5.500 – 2.200 v. Chr.',
+    housing: 'Sesshaftwerdung: Feste Dörfer mit großen Langhäusern (Holz & Lehm)',
+    food: 'Planmäßiger Ackerbau (Getreide, Brot) & Viehzucht im Gehege (Ziege, Schaf, Rind)',
+    tools: 'Gebrannte Keramik im Töpferofen, Mahlstein, Vorratsspeicher, Webstuhl',
+    society: 'Arbeitsteilung im Dorf (Töpfer, Hirten, Weber) & Tauschhandel ohne Geld',
+  },
+  {
+    era: 'Kupferzeit (Ötzi)',
+    chapter: 5,
+    time: 'ca. 4.000 – 2.200 v. Chr.',
+    housing: 'Dörfer mit spezialisierten Werkstätten und Bergbau-Stollen',
+    food: 'Ackerbau, Viehzucht & mit Salz („Weißes Gold“) haltbar gemachte Vorräte',
+    tools: 'Spitzhacke für Erzbergbau, Schmelzofen (>1.000 °C), gegossenes Kupferbeil',
+    society: 'Fernhandel (Salz, Bernstein), Spezialisten (Bergleute, Gießer), erster Reichtum',
+  },
+  {
+    era: 'Bronze- & Eisenzeit',
+    chapter: 6,
+    time: 'ab 2.200 v. Chr. / ab 800 v. Chr.',
+    housing: 'Befestigte Siedlungen mit Schutzwall, Schmieden und Handelsplätzen',
+    food: 'Ertragreicher Ackerbau durch eiserne Pflugscharen und Sicheln',
+    tools: 'Bronze (Legierung: 90% Kupfer + 10% Zinn) & im Rennofen geschmiedetes Eisen',
+    society: 'Europaweiter Zinn-Fernhandel, mächtige Anführer/Häuptlinge, Berufsschmiede',
+  },
+];
 
 export interface ChapterMeta {
   id: number;
   title: string;
   subtitle: string;
   era: string;
+  merksatz: string;
   quests: string[];
   intro: DialogNode[];
   hints: Record<number, string>;
@@ -116,6 +338,8 @@ export const CHAPTERS: Record<number, ChapterMeta> = {
     title: 'Kapitel 1: Jäger und Sammler',
     subtitle: 'Überleben als Nomaden in der Altsteinzeit',
     era: 'Altsteinzeit (ca. 40.000 v. Chr.)',
+    merksatz:
+      'In der Altsteinzeit lebten die Menschen als Jäger und Sammler in kleinen Gruppen (Sippen). Weil die Nahrung an einem Ort schnell aufgebraucht war, zogen sie als Nomaden den Tierherden hinterher und wohnten in Zelten. Ihre wichtigsten Hilfsmittel waren das Feuer und Werkzeuge aus geschlagenem Stein wie der Faustkeil.',
     quests: [
       'Sprich mit der Ältesten Ota (E).',
       'Sammle 5 Beeren an den Sträuchern.',
@@ -175,6 +399,8 @@ export const CHAPTERS: Record<number, ChapterMeta> = {
     title: 'Kapitel 2: Der Wendepunkt',
     subtitle: 'Wolf zähmen & die erste Aussaat am See',
     era: 'Übergang zur Jungsteinzeit (ca. 9.000 v. Chr.)',
+    merksatz:
+      'Nach dem Ende der Eiszeit vor rund 12.000 Jahren wurde das Klima wärmer. Als erstes Tier zähmte der Mensch den Wolf zum Hund (Domestizierung). An Flüssen und Seen begannen die Menschen, Wildgetreide wie Einkorn und Emmer gezielt auszusäen (Ackerbau) und Tontöpfe (Keramik) aus Lehm zu brennen.',
     quests: [
       'Sprich mit Ota über das wärmere Klima (E).',
       'Zähme den scheuen Wolf im Westen mit 1× Fleisch (E).',
@@ -230,6 +456,8 @@ export const CHAPTERS: Record<number, ChapterMeta> = {
     title: 'Kapitel 3: Die Jungsteinzeit-Siedlung',
     subtitle: 'Hausbau, Viehzucht & Arbeitsteilung im Dorf',
     era: 'Jungsteinzeit (ca. 6.000 v. Chr.)',
+    merksatz:
+      'In der Jungsteinzeit wurden aus umherziehenden Nomaden sesshafte Bauern (Sesshaftwerdung / Neolithische Revolution). Sie bauten feste Dörfer mit großen Langhäusern aus Holz und Lehm, hielten Haustiere wie Ziegen, Schafe und Rinder (Viehzucht) und entwickelten durch Vorratshaltung eine Arbeitsteilung mit spezialisierten Handwerkern.',
     quests: [
       'Sprich mit Ota über den Bau eures festen Dorfes (E).',
       'Errichte den Töpferofen am Bauplatz (E): 3 Lehm, 3 Steine.',
@@ -297,6 +525,8 @@ export const CHAPTERS: Record<number, ChapterMeta> = {
     title: 'Kapitel 4: Handel und Dorf',
     subtitle: 'Webkunst, Überschuss & Tauschhandel ohne Geld',
     era: 'Späte Jungsteinzeit (ca. 4.500 v. Chr.)',
+    merksatz:
+      'Am Gewichtswebstuhl webten die Menschen Stoffe aus Wolle und Leinen. Weil die Dörfer mehr produzierten als sie selbst verbrauchten (Überschuss), entstand der Tauschhandel ohne Münzgeld (Ware gegen Ware): Getreide und Stoff wurden gegen Salz („Weißes Gold“ zur Haltbarmachung) und Schmuck wie Bernstein getauscht. So entstanden Besitz und Rangunterschiede.',
     quests: [
       'Sprich mit Ota über den angereisten Fernhändler Enki (E).',
       'Errichte den Webstuhl links im Dorf (E): 4 Stöcke, 2 Steine.',
@@ -364,6 +594,8 @@ export const CHAPTERS: Record<number, ChapterMeta> = {
     title: 'Kapitel 5: Die Kupferzeit',
     subtitle: 'Erzabbau im Nord-Stollen & das Beil des Ötzi',
     era: 'Kupferzeit (ca. 3.300 v. Chr.)',
+    merksatz:
+      'In der Kupferzeit entdeckten die Menschen das erste Metall: Sie bauten Kupfererz in Bergbau-Stollen ab, schmolzen es in über 1.000 °C heißen Schmelzöfen und gossen es in Formen. Ein berühmtes Beispiel ist das gegossene Kupferbeil der Gletschermumie Ötzi (ca. 3.300 v. Chr.). Metall ließ sich bei Bruch immer wieder neu einschmelzen.',
     quests: [
       'Sprich mit Ota über die Entdeckung des ersten Metalls (E).',
       'Stelle im Handwerksmenü (C) eine Spitzhacke her (2 Stöcke, 3 Steine).',
@@ -427,6 +659,8 @@ export const CHAPTERS: Record<number, ChapterMeta> = {
     title: 'Kapitel 6: Bronze- und Eisenzeit',
     subtitle: 'Zinn-Fernhandel, Bronzeguss & die Eisenschmiede',
     era: 'Bronze- & Eisenzeit (ab 2.200 / 800 v. Chr.)',
+    merksatz:
+      'In der Bronzezeit (ab ca. 2.200 v. Chr.) schmolzen Gießer 9 Teile Kupfer und 1 Teil seltenes Zinn zu einer harten Legierung zusammen: Bronze. Ab ca. 800 v. Chr. begann in Mitteleuropa die Eisenzeit: In über 1.500 °C heißen Rennöfen wurde heimisches Eisenerz verhüttet und auf dem Amboss zu noch härteren Werkzeugen, Pflugscharen und Schwertern geschmiedet.',
     quests: [
       'Sprich mit Ota über das Geheimnis von Bronze und Eisen (E).',
       'Tausche bei Fernhändler Enki (E oder H) seltenes Zinnerz ein.',
