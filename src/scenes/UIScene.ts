@@ -201,30 +201,36 @@ export class UIScene extends Phaser.Scene {
 
     this.root.innerHTML = `
       <div class="hud-top">
-        <div class="hud-quest-box">
+        <div class="hud-quest-box" id="hud-quest-box" title="Tippen für Details">
           <div class="hud-chapter-title" id="hud-title"></div>
           <div class="hud-quest-text" id="hud-quest"></div>
           <div class="hud-compass" id="hud-compass"></div>
         </div>
         <div class="hud-right">
-          <div class="hud-bars-card">
-            <div class="hud-bar-row">
-              <span>🍖 Essen</span>
-              <div class="hud-bar-track"><div class="hud-bar-fill" id="bar-food" style="background:#e0894a;width:85%"></div></div>
+          <div class="hud-top-right-group">
+            <div class="hud-bars-card" id="hud-bars-card">
+              <div class="hud-bar-row" id="row-food" style="cursor:pointer;" title="Tippen zum Essen (F)">
+                <span>🍖 Essen</span>
+                <div class="hud-bar-track"><div class="hud-bar-fill" id="bar-food" style="background:#e0894a;width:85%"></div></div>
+              </div>
+              <div class="hud-bar-row">
+                <span>🛡️ Schutz</span>
+                <div class="hud-bar-track"><div class="hud-bar-fill" id="bar-safety" style="background:#5aa6e8;width:85%"></div></div>
+              </div>
+              <div class="hud-bar-row">
+                <span>📖 Wissen</span>
+                <div class="hud-bar-track"><div class="hud-bar-fill" id="bar-know" style="background:#e8d25a;width:0%"></div></div>
+              </div>
+              <div class="hud-bar-subinfo" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#ffe9b0;margin-top:2px;gap:6px;">
+                <span id="hud-lex-count">Lexikon: 0/27</span>
+                <span id="hud-clock">☀️ Tag</span>
+                <span id="hud-music-toggle" style="cursor:pointer;user-select:none;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,0.32);border:1px solid #7c5a2c;" title="Hintergrundmusik an/aus (M)">🎵 Musik: An</span>
+              </div>
             </div>
-            <div class="hud-bar-row">
-              <span>🛡️ Schutz</span>
-              <div class="hud-bar-track"><div class="hud-bar-fill" id="bar-safety" style="background:#5aa6e8;width:85%"></div></div>
-            </div>
-            <div class="hud-bar-row">
-              <span>📖 Wissen</span>
-              <div class="hud-bar-track"><div class="hud-bar-fill" id="bar-know" style="background:#e8d25a;width:0%"></div></div>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#ffe9b0;margin-top:2px;gap:6px;">
-              <span id="hud-lex-count">Lexikon: 0/27</span>
-              <span id="hud-clock">☀️ Tag</span>
-              <span id="hud-music-toggle" style="cursor:pointer;user-select:none;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,0.32);border:1px solid #7c5a2c;" title="Hintergrundmusik an/aus (M)">🎵 Musik: An</span>
-            </div>
+            <button class="retro-btn hud-mobile-menu-btn" id="hud-mobile-menu-btn" data-act="pause" title="Menü & Pause öffnen">
+              <span style="font-size:15px;">⏸</span>
+              <span>Menü</span>
+            </button>
           </div>
           <div class="hud-btn-row">
             <button class="retro-btn" data-act="pause" style="border-color:#fbbf24;"><span class="key-badge">P</span> ⏸ Pause</button>
@@ -315,6 +321,24 @@ export class UIScene extends Phaser.Scene {
       });
     });
     this.root.querySelector('#hud-music-toggle')?.addEventListener('click', () => this.toggleMusic());
+
+    const questBox = this.root.querySelector('#hud-quest-box');
+    if (questBox) {
+      questBox.addEventListener('click', () => {
+        questBox.classList.toggle('expanded');
+      });
+    }
+
+    const foodRow = this.root.querySelector('#row-food');
+    if (foodRow) {
+      foodRow.addEventListener('click', () => {
+        if (!state.modal) this.pushToast(state.eat());
+      });
+    }
+
+    document.getElementById('btn-dismiss-rotate')?.addEventListener('click', () => {
+      document.getElementById('rotate-prompt')?.classList.add('dismissed');
+    });
 
     this.dlgNextBtn.addEventListener('click', () => this.advanceDialog());
     this.dlgSpeakBtn.addEventListener('click', () => {
