@@ -330,7 +330,8 @@ export class BootScene extends Phaser.Scene {
     this.anims.create({ key: 'wolf-walk-right', frames: this.anims.generateFrameNumbers('sdv_wolf', { start: 4, end: 7 }), frameRate: 6, repeat: -1 });
     this.anims.create({ key: 'wolf-walk-up', frames: this.anims.generateFrameNumbers('sdv_wolf', { start: 8, end: 11 }), frameRate: 6, repeat: -1 });
     this.anims.create({ key: 'wolf-stalk', frames: this.anims.generateFrameNumbers('sdv_wolf', { start: 12, end: 15 }), frameRate: 5, repeat: -1 });
-    this.anims.create({ key: 'wolf-howl', frames: this.anims.generateFrameNumbers('sdv_wolf', { start: 24, end: 27 }), frameRate: 3, repeat: -1 });
+    this.anims.create({ key: 'wolf-howl', frames: [{ key: 'sdv_wolf', frame: 24 }, { key: 'sdv_wolf', frame: 25 }, { key: 'sdv_wolf', frame: 26 }, { key: 'sdv_wolf', frame: 25 }], frameRate: 4, repeat: -1 });
+    this.anims.create({ key: 'wolf-lay', frames: [{ key: 'sdv_wolf', frame: 28 }, { key: 'sdv_wolf', frame: 29 }], frameRate: 1.5, repeat: -1 });
 
     // Gezähmter Hütehund Lupo (sdv_dog_lupo)
     this.anims.create({ key: 'lupo-idle', frames: [{ key: 'sdv_dog_lupo', frame: 24 }], frameRate: 1 });
@@ -338,8 +339,9 @@ export class BootScene extends Phaser.Scene {
     this.anims.create({ key: 'lupo-walk-down', frames: this.anims.generateFrameNumbers('sdv_dog_lupo', { start: 0, end: 3 }), frameRate: 6, repeat: -1 });
     this.anims.create({ key: 'lupo-walk-right', frames: this.anims.generateFrameNumbers('sdv_dog_lupo', { start: 4, end: 7 }), frameRate: 6, repeat: -1 });
     this.anims.create({ key: 'lupo-walk-up', frames: this.anims.generateFrameNumbers('sdv_dog_lupo', { start: 8, end: 11 }), frameRate: 6, repeat: -1 });
-    this.anims.create({ key: 'lupo-wag', frames: this.anims.generateFrameNumbers('sdv_dog_lupo', { start: 28, end: 31 }), frameRate: 8, repeat: -1 });
-    this.anims.create({ key: 'lupo-sleep', frames: this.anims.generateFrameNumbers('sdv_dog_lupo', { start: 32, end: 35 }), frameRate: 2, repeat: -1 });
+    this.anims.create({ key: 'lupo-wag', frames: [{ key: 'sdv_dog_lupo', frame: 24 }, { key: 'sdv_dog_lupo', frame: 25 }, { key: 'sdv_dog_lupo', frame: 26 }, { key: 'sdv_dog_lupo', frame: 25 }], frameRate: 5, repeat: -1 });
+    this.anims.create({ key: 'lupo-lay', frames: [{ key: 'sdv_dog_lupo', frame: 28 }, { key: 'sdv_dog_lupo', frame: 29 }], frameRate: 1.5, repeat: -1 });
+    this.anims.create({ key: 'lupo-sleep', frames: [{ key: 'sdv_dog_lupo', frame: 32 }, { key: 'sdv_dog_lupo', frame: 33 }, { key: 'sdv_dog_lupo', frame: 34 }, { key: 'sdv_dog_lupo', frame: 33 }], frameRate: 1.5, repeat: -1 });
 
     // Wilde Feldhasen (sdv_rabbit)
     this.anims.create({ key: 'rabbit-idle', frames: [{ key: 'sdv_rabbit', frame: 12 }], frameRate: 1 });

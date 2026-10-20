@@ -756,7 +756,7 @@ export class WorldScene extends Phaser.Scene {
       const wNode = this.addNode('wolf', texKey, undefined, wx, wy, false);
       wNode.sprite.setScale(1.0);
       if (state.wolfTamed) {
-        wNode.sprite.play('lupo-wag');
+        wNode.sprite.play('lupo-lay');
       } else {
         wNode.sprite.play('wolf-idle');
       }
@@ -1636,12 +1636,12 @@ export class WorldScene extends Phaser.Scene {
     if (state.wolfTamed && this.wolfNode) {
       const ws = this.wolfNode.sprite;
       const d = Phaser.Math.Distance.Between(ws.x, ws.y, this.player.x, this.player.y);
-      if (d > 44) {
+      if (d > 52) {
         const angle = Phaser.Math.Angle.Between(ws.x, ws.y, this.player.x, this.player.y);
         const dx = Math.cos(angle);
         const dy = Math.sin(angle);
-        ws.x += dx * 1.25;
-        ws.y += dy * 1.25;
+        ws.x += dx * 1.35;
+        ws.y += dy * 1.35;
         if (Math.abs(dx) >= Math.abs(dy)) {
           ws.play('lupo-walk-right', true);
           ws.setFlipX(dx < 0);
@@ -1654,15 +1654,16 @@ export class WorldScene extends Phaser.Scene {
         }
         ws.setDepth(ws.y + 8);
         this.wolfNode.label?.setPosition(ws.x, ws.y - 16);
-      } else if (d < 30) {
+      } else if (d < 26) {
         const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, ws.x, ws.y);
         ws.x += Math.cos(angle) * 0.9;
         ws.y += Math.sin(angle) * 0.9;
         ws.setDepth(ws.y + 8);
         this.wolfNode.label?.setPosition(ws.x, ws.y - 16);
       } else {
-        if (ws.anims.currentAnim?.key !== 'lupo-wag') {
-          ws.play('lupo-wag', true);
+        // Spieler steht still -> Lupo legt sich gemütlich hin und bleibt ruhig liegen
+        if (ws.anims.currentAnim?.key !== 'lupo-lay' && ws.anims.currentAnim?.key !== 'lupo-wag') {
+          ws.play('lupo-lay', true);
         }
       }
     }
@@ -1908,6 +1909,10 @@ export class WorldScene extends Phaser.Scene {
   private interactWolf(n: Node): void {
     if (state.wolfTamed) {
       state.safety = Math.min(100, state.safety + 10);
+      n.sprite.play('lupo-wag', true);
+      this.time.delayedCall(2500, () => {
+        if (n.sprite && n.sprite.active) n.sprite.play('lupo-lay', true);
+      });
       state.emit('toast', 'Wuff! Hütehund Lupo freut sich und passt auf dich auf (+10 Schutz).');
       return;
     }
@@ -1922,6 +1927,9 @@ export class WorldScene extends Phaser.Scene {
     state.wolfTamed = true;
     n.sprite.setTexture('sdv_dog_lupo', 24);
     n.sprite.play('lupo-wag');
+    this.time.delayedCall(2500, () => {
+      if (n.sprite && n.sprite.active) n.sprite.play('lupo-lay', true);
+    });
     n.label?.setText('Hund Lupo');
     state.unlock('wolf');
     state.checkQuest();
