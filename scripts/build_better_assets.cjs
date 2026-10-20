@@ -131,8 +131,83 @@ async function buildBetterAssets() {
   // Holzstapel mit Axt: Hunter Settlement tile-B-01 (x=576, y=672, w=48, h=48) -> 28x28
   await cropImage('better assets/extracted/Hunter Settlement/tile-B-01.png', 576, 672, 48, 48, 'public/assets/props/wood_stack.png', 28, 28);
 
-  // Jagdfalle: Hunter Settlement tile-B-01 (x=432, y=144, w=48, h=48) -> 24x24
-  await cropImage('better assets/extracted/Hunter Settlement/tile-B-01.png', 432, 144, 48, 48, 'public/assets/props/trap_active.png', 24, 24);
+  // Jagdfalle (leer & voll): Hunter Settlement tile-B-05 (x=480, y=720, w=48, h=48)
+  const hs5Path = path.join(__dirname, '..', 'better assets/Hunter Settlement/tile-B-05.png');
+  const fellPath = path.join(__dirname, '..', 'public/assets/icons/fell.png');
+  const shikashiPath = path.join(__dirname, '..', 'better assets/Shikashi\'s Fantasy Icons Pack v2/#1 - Transparent Icons.png');
+
+  if (fs.existsSync(hs5Path) && fs.existsSync(shikashiPath)) {
+    const b64_hs5 = fs.readFileSync(hs5Path).toString('base64');
+    const b64_fell = fs.existsSync(fellPath) ? fs.readFileSync(fellPath).toString('base64') : '';
+    const b64_shikashi = fs.readFileSync(shikashiPath).toString('base64');
+
+    const trapData = await page.evaluate(async (b64_hs5, b64_fell, b64_shikashi) => {
+      function loadImg(b64) {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.src = 'data:image/png;base64,' + b64;
+        });
+      }
+      const [imgHS5, imgFell, imgShikashi] = await Promise.all([
+        loadImg(b64_hs5), loadImg(b64_fell), loadImg(b64_shikashi)
+      ]);
+
+      const W = 32, H = 28;
+      const cOpen = document.createElement('canvas');
+      cOpen.width = 42; cOpen.height = 35;
+      const ctxO = cOpen.getContext('2d');
+      ctxO.drawImage(imgHS5, 480 + 3, 720 + 7, 42, 35, 0, 0, 42, 35);
+
+      // 1. Trap Empty (aufgestellt)
+      const cEmpty = document.createElement('canvas');
+      cEmpty.width = W; cEmpty.height = H;
+      const ctxE = cEmpty.getContext('2d');
+      ctxE.imageSmoothingEnabled = false;
+      ctxE.fillStyle = 'rgba(12, 10, 6, 0.35)';
+      ctxE.beginPath(); ctxE.ellipse(16, 16, 14, 8, 0, 0, Math.PI * 2); ctxE.fill();
+      ctxE.drawImage(cOpen, 0, 0, 42, 35, 1, 3, 30, 24);
+
+      // 2. Trap Full (Beute gefangen)
+      const cFull = document.createElement('canvas');
+      cFull.width = W; cFull.height = H;
+      const ctxF = cFull.getContext('2d');
+      ctxF.imageSmoothingEnabled = false;
+      ctxF.fillStyle = 'rgba(12, 10, 6, 0.45)';
+      ctxF.beginPath(); ctxF.ellipse(16, 21, 14, 6, 0, 0, Math.PI * 2); ctxF.fill();
+      ctxF.drawImage(cOpen, 0, 0, 42, 16, 1, 9, 30, 11);
+      if (imgFell) ctxF.drawImage(imgFell, 0, 0, 32, 32, 9, 6, 14, 14);
+
+      // Hare head & ears
+      ctxF.fillStyle = '#3a1e0b'; ctxF.fillRect(17, 3, 6, 7);
+      ctxF.fillStyle = '#78421e'; ctxF.fillRect(18, 4, 4, 5);
+      ctxF.fillStyle = '#af6b3b'; ctxF.fillRect(19, 5, 2, 4);
+      ctxF.fillStyle = '#df9d6b'; ctxF.fillRect(21, 6, 2, 2);
+      ctxF.fillStyle = '#3a1e0b'; ctxF.fillRect(16, -1, 2, 5); ctxF.fillRect(20, -1, 2, 5);
+      ctxF.fillStyle = '#f5aba0'; ctxF.fillRect(16, 0, 1, 3); ctxF.fillRect(20, 0, 1, 3);
+      ctxF.fillStyle = '#120803'; ctxF.fillRect(20, 5, 1, 1);
+      ctxF.fillStyle = '#e86f60'; ctxF.fillRect(22, 6, 1, 1);
+      ctxF.drawImage(cOpen, 0, 16, 42, 19, 1, 9, 30, 14);
+
+      // 3. Trap Icon (Shikashi col 14, row 10)
+      const cIcon = document.createElement('canvas');
+      cIcon.width = 32; cIcon.height = 32;
+      const ctxI = cIcon.getContext('2d');
+      ctxI.imageSmoothingEnabled = false;
+      ctxI.drawImage(imgShikashi, 448, 320, 32, 32, 0, 0, 32, 32);
+
+      return {
+        empty: cEmpty.toDataURL('image/png'),
+        full: cFull.toDataURL('image/png'),
+        icon: cIcon.toDataURL('image/png'),
+      };
+    }, b64_hs5, b64_fell, b64_shikashi);
+
+    fs.writeFileSync(path.join(__dirname, '../public/assets/props/trap_active.png'), Buffer.from(trapData.empty.replace(/^data:image\/png;base64,/, ''), 'base64'));
+    fs.writeFileSync(path.join(__dirname, '../public/assets/props/trap_full.png'), Buffer.from(trapData.full.replace(/^data:image\/png;base64,/, ''), 'base64'));
+    fs.writeFileSync(path.join(__dirname, '../public/assets/icons/trap.png'), Buffer.from(trapData.icon.replace(/^data:image\/png;base64,/, ''), 'base64'));
+    console.log('Saved authentic trap_active.png, trap_full.png, and trap.png icon');
+  }
 
   // Upgraded Farmland (4-stage wheat from farm-2 tile-B-02)
   await cropImage('better assets/extracted/farm-2/tile-B-02.png', 0, 96, 48, 48, 'public/assets/props/farm_soil_dry.png', 16, 16);

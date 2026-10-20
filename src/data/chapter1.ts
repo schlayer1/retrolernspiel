@@ -3,7 +3,7 @@ import { ItemId } from './items';
 export interface LexiconEntry {
   title: string;
   era: string;
-  icon: ItemId;
+  icon: ItemId | 'trap';
   unlockHint: string;
   milestone?: boolean;
   text: string;
@@ -83,7 +83,7 @@ export const LEXICON: Record<string, LexiconEntry> = {
   falle: {
     title: 'Jagd & Fallenbau',
     era: 'Altsteinzeit',
-    icon: 'fleisch',
+    icon: 'trap',
     unlockHint: 'Stelle eine Falle auf (C) und leere sie, sobald sie ausgelöst hat (E).',
     text: 'Die Jagd lieferte nicht nur energiereiches Fleisch: Aus den Fellen nähten die Menschen warme Kleidung, aus Sehnen drehten sie Schnüre und aus Knochen schnitzten sie Nadeln und Speerspitzen.',
   },

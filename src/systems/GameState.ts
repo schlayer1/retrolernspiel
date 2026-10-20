@@ -6,7 +6,7 @@ import { FarmPlotState, Placed, PlayerGender, PlayerRole, SaveData, SaveManager 
 
 export const DAY_MS = 240_000; // Dauer eines Tages in Echtzeit
 export const TRAP_MS = 20_000; // Zeit, bis eine Falle etwas gefangen hat
-export const CROP_MS = 18_000; // Zeit nach dem Gießen, bis Getreide reif ist (oder sofort durch Schlafen)
+export const CROP_MS = 36_000; // Zeit nach dem Gießen, bis Getreide durch 5 Wachstumsstufen gereift ist (~36 s, oder sofort durch Schlafen)
 
 export interface DialogSpec {
   speaker: string;

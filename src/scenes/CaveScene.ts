@@ -76,8 +76,9 @@ export class CaveScene extends Phaser.Scene {
     // 2. Höhlen-Boden, Felswände & See mit echten 16-Bit-Tiles rendern
     this.buildCaveMap();
 
-    // 3. Interaktive Knoten (Erzadern, Relikte, Ausgang)
+    // 3. Interaktive Knoten (Erzadern, Relikte, Ausgang) & Höhlenflora
     this.spawnCaveNodes();
+    this.spawnCaveFlora();
 
     // 4. Spieler platzieren (Start beim südlichen Eingang)
     const startX = 256;
@@ -253,6 +254,22 @@ export class CaveScene extends Phaser.Scene {
 
     this.lightCircle.fillStyle(0xffffff, 0.9);
     this.lightCircle.fillCircle(256, 320, 40);
+
+    // Sanfte Biolumineszenz der Höhlenpilze im Dunkeln
+    const shrooms = [
+      [125, 145],
+      [140, 155],
+      [185, 235],
+      [310, 75],
+      [440, 185],
+      [335, 250],
+    ];
+    shrooms.forEach(([sx, sy]) => {
+      this.lightCircle.fillStyle(0xffffff, 0.35);
+      this.lightCircle.fillCircle(sx, sy, 12);
+      this.lightCircle.fillStyle(0xffffff, 0.15);
+      this.lightCircle.fillCircle(sx, sy, 22);
+    });
 
     this.darkOverlay.erase(this.lightCircle, 0, 0);
   }
@@ -454,6 +471,21 @@ export class CaveScene extends Phaser.Scene {
     (bones.body as Phaser.Physics.Arcade.StaticBody).setSize(28, 14).setOffset(4, 6);
     bones.refreshBody();
     bones.setDepth(220 + 8);
+  }
+
+  /** Platziert atmosphärische Höhlenpilze und Flechten (sdv_cave_plants). */
+  private spawnCaveFlora(): void {
+    const flora = [
+      { x: 125, y: 145, frame: 0 }, // Roter Tupfenpilz am See
+      { x: 140, y: 155, frame: 1 }, // Violetter Leuchtpilz
+      { x: 185, y: 235, frame: 2 }, // Pilz-Cluster
+      { x: 310, y: 75, frame: 1 },  // Kristall-Pilz bei Kupferader
+      { x: 440, y: 185, frame: 3 }, // Höhlenflechte
+      { x: 335, y: 250, frame: 0 }, // Roter Pilz bei Eisenerz
+    ];
+    flora.forEach((f) => {
+      this.add.image(f.x, f.y, 'sdv_cave_plants', f.frame).setDepth(f.y + 4);
+    });
   }
 
   private checkInteractions(): void {

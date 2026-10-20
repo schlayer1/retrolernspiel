@@ -847,7 +847,7 @@ export class UIScene extends Phaser.Scene {
       const hasBld = !r.requiresBuilding || state.hasBuilding(r.requiresBuilding);
       const canMat = state.canAfford(r);
       const cls = canMat && hasBld ? 'recipe-card affordable' : !hasBld ? 'recipe-card missing-bld' : 'recipe-card';
-      const iconId: ItemId = r.id === 'fire' ? 'stock' : r.id === 'trap' ? 'fleisch' : (r.id as ItemId);
+      const iconId: string = r.id === 'fire' ? 'stock' : r.id === 'trap' ? 'trap' : (r.id as ItemId);
       return `
         <div class="${cls}" data-craft-idx="${i}">
           <img class="pixel-icon" src="assets/icons/${iconId}.png" alt="${escapeHtml(r.name)}" style="width:32px;height:32px;margin-top:2px;" />

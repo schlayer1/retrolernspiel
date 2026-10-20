@@ -752,9 +752,15 @@ export class WorldScene extends Phaser.Scene {
     if (state.chapter >= 2 || state.wolfTamed) {
       const wx = state.wolfTamed ? (MAP_W * TILE) / 2 + 44 : 295;
       const wy = state.wolfTamed ? (MAP_H * TILE) / 2 + 18 : 295;
-      const wNode = this.addNode('wolf', 'wolf', undefined, wx, wy, false);
-      wNode.sprite.setScale(1.3);
-      wNode.label = this.addLabel(wx, wy - 14, state.wolfTamed ? 'Hund Lupo' : 'Scheuer Wolf', '#ffffff');
+      const texKey = state.wolfTamed ? 'sdv_dog_lupo' : 'sdv_wolf';
+      const wNode = this.addNode('wolf', texKey, undefined, wx, wy, false);
+      wNode.sprite.setScale(1.0);
+      if (state.wolfTamed) {
+        wNode.sprite.play('lupo-wag');
+      } else {
+        wNode.sprite.play('wolf-idle');
+      }
+      wNode.label = this.addLabel(wx, wy - 16, state.wolfTamed ? 'Hund Lupo' : 'Scheuer Wolf', '#ffffff');
       this.wolfNode = wNode;
 
       if (!state.wolfTamed) {
@@ -763,7 +769,10 @@ export class WorldScene extends Phaser.Scene {
           sprite: wNode.sprite,
           bounds: { minX: 272, maxX: 318, minY: 278, maxY: 316 },
           speed: 16,
-          labelOffsetY: -14,
+          animPrefix: 'wolf',
+          idleAnim: 'wolf-idle',
+          specialAnim: 'wolf-howl',
+          labelOffsetY: -16,
           syncLabel: (nx, ny) => wNode.label?.setPosition(nx, ny),
         });
       }
@@ -822,53 +831,107 @@ export class WorldScene extends Phaser.Scene {
         if (built) this.applyBuiltVisual(n, b);
       });
 
-      // Frei umherziehende Wildziegen-Herde auf der südöstlichen Weide
-      // Jede Wildziege ist ein vollwertiger `wild_goat`-Interaktionsknoten und bleibt stehen / kommt näher,
-      // sobald der Spieler mit Getreide herantritt!
+      // Frei umherziehende Wildziegen-Herde auf der südöstlichen Weide (sdv_goat)
       const goatSpawns: Array<[number, number]> = [
         [632, 372],
         [668, 395],
       ];
       goatSpawns.forEach(([gx, gy]) => {
-        const wg = this.addNode('wild_goat', 'goat', undefined, gx, gy, false);
-        wg.sprite.setScale(0.55).play('goat-idle');
-        wg.label = this.addLabel(gx, gy - 18, 'Wildziege');
+        const wg = this.addNode('wild_goat', 'sdv_goat', undefined, gx, gy, false);
+        wg.sprite.setScale(1.0).play('goat-idle');
+        wg.label = this.addLabel(gx, gy - 16, 'Wildziege');
         this.wildlife.addAnimal({
           kind: 'wild_goat',
           sprite: wg.sprite,
           bounds: { minX: 595, maxX: 705, minY: 342, maxY: 422 },
-          speed: 19,
+          speed: 18,
+          animPrefix: 'goat',
           idleAnim: 'goat-idle',
-          walkAnim: 'goat-walk',
-          labelOffsetY: -18,
+          specialAnim: 'goat-graze',
+          labelOffsetY: -16,
           syncLabel: (nx, ny) => wg.label?.setPosition(nx, ny),
         });
       });
 
-      // Friedlich grasende Auerochsen / Ur-Rinder auf den Außenweiden
+      // Friedlich grasende Auerochsen / Ur-Rinder & Kalb auf den Außenweiden
       const cattleSpawns: Array<[number, number, { minX: number; maxX: number; minY: number; maxY: number }]> = [
         [688, 282, { minX: 650, maxX: 725, minY: 255, maxY: 318 }],
         [235, 495, { minX: 195, maxX: 285, minY: 468, maxY: 532 }],
       ];
       cattleSpawns.forEach(([cx, cy, bounds]) => {
-        const cowSprite = this.add.sprite(cx, cy, 'cow', 0).setScale(0.56).setTint(0xc89b7b).setDepth(cy + 10);
-        const cowLabel = this.addLabel(cx, cy - 20, 'Auerochse', '#e6ccb2');
+        const cowSprite = this.add.sprite(cx, cy, 'sdv_cow', 4).setScale(1.0).setDepth(cy + 10);
+        cowSprite.play('cow-idle');
+        const cowLabel = this.addLabel(cx, cy - 18, 'Auerochse', '#e6ccb2');
         this.wildlife.addAnimal({
           kind: 'auerochse',
           sprite: cowSprite,
           bounds,
           speed: 14,
+          animPrefix: 'cow',
           idleAnim: 'cow-idle',
-          walkAnim: 'cow-walk',
-          labelOffsetY: -20,
+          specialAnim: 'cow-graze',
+          labelOffsetY: -18,
           syncLabel: (nx, ny) => cowLabel.setPosition(nx, ny),
         });
+      });
+
+      // Ein neugieriges Ur-Kalb auf der südwestlichen Weide
+      const calfSprite = this.add.sprite(265, 505, 'sdv_calf', 4).setScale(0.85).setDepth(515);
+      calfSprite.play('calf-idle');
+      const calfLabel = this.addLabel(265, 489, 'Ur-Kalb', '#f5ebe0');
+      this.wildlife.addAnimal({
+        kind: 'calf',
+        sprite: calfSprite,
+        bounds: { minX: 205, maxX: 275, minY: 478, maxY: 525 },
+        speed: 15,
+        animPrefix: 'calf',
+        idleAnim: 'calf-idle',
+        labelOffsetY: -16,
+        syncLabel: (nx, ny) => calfLabel.setPosition(nx, ny),
       });
 
       if (state.goatsTamed > 0) {
         this.spawnTamedGoat();
       }
     }
+
+    // Wilde Feldhasen (hoppeln über Wiesen und schnuppern an Fallen)
+    const rabbitSpawns: Array<[number, number, { minX: number; maxX: number; minY: number; maxY: number }]> = [
+      [275, 420, { minX: 210, maxX: 330, minY: 370, maxY: 460 }],
+      [450, 380, { minX: 410, maxX: 520, minY: 340, maxY: 430 }],
+    ];
+    rabbitSpawns.forEach(([rx, ry, bounds]) => {
+      const rSprite = this.add.sprite(rx, ry, 'sdv_rabbit', 12).setScale(1.0).setDepth(ry + 6);
+      rSprite.play('rabbit-idle');
+      const rLabel = this.addLabel(rx, ry - 14, 'Feldhase', '#d5bdaf');
+      this.wildlife.addAnimal({
+        kind: 'rabbit',
+        sprite: rSprite,
+        bounds,
+        speed: 18,
+        animPrefix: 'rabbit',
+        idleAnim: 'rabbit-idle',
+        specialAnim: 'rabbit-sniff',
+        labelOffsetY: -14,
+        syncLabel: (nx, ny) => rLabel.setPosition(nx, ny),
+      });
+    });
+
+    // Wildschwein im dichten westlichen Wald
+    const pigSprite = this.add.sprite(155, 380, 'sdv_pig', 4).setScale(1.0).setDepth(390);
+    pigSprite.play('pig-idle');
+    const pigLabel = this.addLabel(155, 362, 'Wildschwein', '#b08968');
+    this.wildlife.addAnimal({
+      kind: 'pig',
+      sprite: pigSprite,
+      bounds: { minX: 120, maxX: 190, minY: 350, maxY: 420 },
+      speed: 14,
+      animPrefix: 'pig',
+      idleAnim: 'pig-idle',
+      specialAnim: 'pig-forage',
+      labelOffsetY: -18,
+      syncLabel: (nx, ny) => pigLabel.setPosition(nx, ny),
+    });
 
     // 6. Kapitel 4+: Fernhändler Enki mit Marktstand im Süden des Dorfes
     if (state.chapter >= 4) {
@@ -1090,18 +1153,37 @@ export class WorldScene extends Phaser.Scene {
     if (this.nodes.some((n) => n.kind === 'tamed_goat')) return;
     const gx = 524;
     const gy = 352;
-    const g = this.addNode('tamed_goat', 'goat', undefined, gx, gy, false);
-    g.sprite.setScale(0.55).play('goat-idle').setDepth(gy + 10);
+    const g = this.addNode('tamed_goat', 'sdv_goat', undefined, gx, gy, false);
+    g.sprite.setScale(1.0).play('goat-idle').setDepth(gy + 10);
     g.label = this.addLabel(gx, gy - 16, 'Zahme Ziege', '#bfffbf');
     this.wildlife.addAnimal({
       kind: 'tamed_goat',
       sprite: g.sprite,
-      bounds: { minX: 506, maxX: 548, minY: 338, maxY: 364 },
+      bounds: { minX: 506, maxX: 546, minY: 338, maxY: 364 },
       speed: 14,
+      animPrefix: 'goat',
       idleAnim: 'goat-idle',
-      walkAnim: 'goat-walk',
+      specialAnim: 'goat-graze',
       labelOffsetY: -16,
       syncLabel: (nx, ny) => g.label?.setPosition(nx, ny),
+    });
+
+    // Fröhliches Zicklein im Gehege (didaktischer Beweis der neolithischen Viehzucht)
+    const kx = 540;
+    const ky = 352;
+    const babySprite = this.add.sprite(kx, ky, 'sdv_goat_baby', 4).setScale(0.85).setDepth(ky + 10);
+    babySprite.play('goat-baby-idle');
+    const babyLabel = this.addLabel(kx, ky - 14, 'Zicklein', '#dcfce7');
+    this.wildlife.addAnimal({
+      kind: 'goat_baby',
+      sprite: babySprite,
+      bounds: { minX: 510, maxX: 546, minY: 340, maxY: 362 },
+      speed: 13,
+      animPrefix: 'goat-baby',
+      idleAnim: 'goat-baby-idle',
+      specialAnim: 'goat-baby-play',
+      labelOffsetY: -14,
+      syncLabel: (nx, ny) => babyLabel.setPosition(nx, ny),
     });
   }
 
@@ -1115,11 +1197,37 @@ export class WorldScene extends Phaser.Scene {
       n.sprite.setTexture('farm_soil_dry').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
     } else if (p.stage === 'seeded') {
       n.sprite.setTexture('farm_soil_seeded').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
+      // Stufe 0: Wildkorn-Samenkörner in der aufgelockerten Erde
+      const frameIdx = 11 * 16 + 0;
+      if (!n.cropSprite) {
+        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 2, 'sdv_crops', frameIdx).setDepth(n.sprite.depth + 1);
+      } else {
+        n.cropSprite.setTexture('sdv_crops', frameIdx).setVisible(true).setDepth(n.sprite.depth + 1);
+      }
     } else if (p.stage === 'watered') {
       n.sprite.setTexture('farm_soil_wet').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
+      // Dynamische Zwischenstufen während des Wachstumszeitraffers
+      const elapsed = Date.now() - p.wateredAt;
+      const progress = Math.min(0.99, Math.max(0, elapsed / CROP_MS));
+      let stageFrame = 1; // Keimling
+      if (progress >= 0.66) stageFrame = 3; // Hoher Halm mit grünen Ähren
+      else if (progress >= 0.33) stageFrame = 2; // Grüner Trieb
+
+      const frameIdx = 11 * 16 + stageFrame;
+      if (!n.cropSprite) {
+        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 6, 'sdv_crops', frameIdx).setDepth(n.sprite.depth + 1);
+      } else {
+        n.cropSprite.setTexture('sdv_crops', frameIdx).setVisible(true).setDepth(n.sprite.depth + 1);
+      }
     } else if (p.stage === 'ripe') {
-      // Reifer Weizen wächst stolz aus der Erde hervor (48x54 nativ -> 24x27 im Spiel)
-      n.sprite.setTexture('farm_wheat_ripe').setDisplaySize(24, 27).setOrigin(0.5, 0.56).setAlpha(1);
+      n.sprite.setTexture('farm_soil_dry').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
+      // Stufe 4: Vollreifer, goldgelber neolithischer Weizen bereit zur Ernte mit der Sichel
+      const frameIdx = 11 * 16 + 4;
+      if (!n.cropSprite) {
+        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 8, 'sdv_crops', frameIdx).setDepth(n.sprite.depth + 1);
+      } else {
+        n.cropSprite.setTexture('sdv_crops', frameIdx).setVisible(true).setDepth(n.sprite.depth + 1);
+      }
     }
   }
 
@@ -1146,11 +1254,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spawnTrap(p: { x: number; y: number; t: number }): void {
-    const node = this.addNode('trap', 'trap', undefined, p.x, p.y);
+    const ready = Date.now() - p.t >= TRAP_MS;
+    const node = this.addNode('trap', ready ? 'trap_full' : 'trap', undefined, p.x, p.y);
     node.placed = p;
     node.sprite.setDepth(p.y);
-    this.setFootBox(node.sprite, 12, 8, 2);
-    node.bubble = this.add.image(p.x, p.y - 16, 'objects', 'bubble_excl').setDepth(5000).setVisible(false);
+    this.setFootBox(node.sprite, 16, 10, 2);
+    node.bubble = this.add.image(p.x, p.y - 16, 'objects', 'bubble_excl').setDepth(5000).setVisible(ready);
   }
 
   // ---------------------------------------------------------------- Spielschleife
@@ -1504,34 +1613,57 @@ export class WorldScene extends Phaser.Scene {
       }
       if (n.kind === 'trap' && n.placed && n.bubble) {
         const ready = now - n.placed.t >= TRAP_MS;
+        const targetTex = ready ? 'trap_full' : 'trap';
+        if (n.sprite.texture.key !== targetTex) {
+          n.sprite.setTexture(targetTex);
+        }
         n.bubble.setVisible(ready).setY(n.placed.y - 16 + Math.sin(this.time.now / 200) * 2);
       }
       if (n.kind === 'plot' && n.plotId !== undefined) {
         const p = state.plots[n.plotId];
-        if (p && p.stage === 'watered' && now - p.wateredAt >= CROP_MS) {
-          p.stage = 'ripe';
-          this.refreshPlotVisual(n, p);
-          state.emit('toast', 'Dein Getreide auf dem Acker ist reif zur Ernte!');
+        if (p && p.stage === 'watered') {
+          if (now - p.wateredAt >= CROP_MS) {
+            p.stage = 'ripe';
+            this.refreshPlotVisual(n, p);
+            state.emit('toast', 'Dein Getreide auf dem Acker ist reif zur Ernte!');
+          } else {
+            this.refreshPlotVisual(n, p);
+          }
         }
       }
     }
-    // Gezähmter Hund folgt dem Spieler in gemütlichem Abstand (stört nicht beim Interagieren)
+    // Gezähmter Hund folgt dem Spieler in gemütlichem Abstand mit 4-Richtungs-Animation
     if (state.wolfTamed && this.wolfNode) {
       const ws = this.wolfNode.sprite;
       const d = Phaser.Math.Distance.Between(ws.x, ws.y, this.player.x, this.player.y);
-      if (d > 46) {
+      if (d > 44) {
         const angle = Phaser.Math.Angle.Between(ws.x, ws.y, this.player.x, this.player.y);
-        ws.x += Math.cos(angle) * 1.1;
-        ws.y += Math.sin(angle) * 1.1;
-        ws.setFlipX(Math.cos(angle) < 0);
+        const dx = Math.cos(angle);
+        const dy = Math.sin(angle);
+        ws.x += dx * 1.25;
+        ws.y += dy * 1.25;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          ws.play('lupo-walk-right', true);
+          ws.setFlipX(dx < 0);
+        } else if (dy > 0) {
+          ws.play('lupo-walk-down', true);
+          ws.setFlipX(false);
+        } else {
+          ws.play('lupo-walk-up', true);
+          ws.setFlipX(false);
+        }
         ws.setDepth(ws.y + 8);
-        this.wolfNode.label?.setPosition(ws.x, ws.y - 14);
-      } else if (d < 32) {
+        this.wolfNode.label?.setPosition(ws.x, ws.y - 16);
+      } else if (d < 30) {
         const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, ws.x, ws.y);
         ws.x += Math.cos(angle) * 0.9;
         ws.y += Math.sin(angle) * 0.9;
         ws.setDepth(ws.y + 8);
-        this.wolfNode.label?.setPosition(ws.x, ws.y - 14);
+        this.wolfNode.label?.setPosition(ws.x, ws.y - 16);
+      } else {
+        if (ws.anims.currentAnim?.key !== 'lupo-wag') {
+          ws.play('lupo-wag', true);
+        }
       }
     }
   }
@@ -1630,7 +1762,7 @@ export class WorldScene extends Phaser.Scene {
         if (state.count('fleisch') > 0) return 'E: Fleisch braten';
         return 'E: Am Lagerfeuer ausruhen (bis zum nächsten Tag)';
       case 'trap':
-        return n.placed && Date.now() - n.placed.t >= TRAP_MS ? 'E: Falle leeren' : 'Die Falle ist noch leer ...';
+        return n.placed && Date.now() - n.placed.t >= TRAP_MS ? 'E: Falle leeren (Beute einsammeln)' : 'Die Falle ist noch leer (wartet auf Beute) ...';
       default:
         return '';
     }
@@ -1651,24 +1783,29 @@ export class WorldScene extends Phaser.Scene {
           state.add('beere', amt);
           state.unlock('sammeln');
           state.bump('beere', amt);
+          this.playToolActionFeedback('gather');
           state.emit('toast', `+${amt} Beeren${state.berryYieldMultiplier > 1 ? ' (🌿 Sammler-Bonus!)' : ''}`);
         } else if (n.kind === 'stump') {
           state.add('stock', 2);
           state.bump('stock', 2);
+          this.playToolActionFeedback('chop');
           state.emit('toast', '+2 Stöcke');
         } else if (n.kind === 'rock') {
           const amt = Phaser.Math.Between(1, 2);
           state.add('stein', amt);
           state.bump('stein', amt);
+          this.playToolActionFeedback('mine');
           state.emit('toast', `+${amt} Steine`);
         } else if (n.kind === 'wildgrain') {
           state.add('samen', 2);
           state.unlock('wildkorn');
           state.bump('samen', 2);
+          this.playToolActionFeedback('gather');
           state.emit('toast', '+2 Wildkorn-Samen');
         } else if (n.kind === 'clay') {
           state.add('lehm', 2);
           state.bump('lehm', 2);
+          this.playToolActionFeedback('gather');
           state.emit('toast', '+2 Feuchter Lehm');
         }
         n.readyAt = now + REGROW_MS;
@@ -1681,6 +1818,7 @@ export class WorldScene extends Phaser.Scene {
         }
         state.add('tontopf', -1);
         state.add('wasser', 1);
+        this.playToolActionFeedback('water');
         state.emit('toast', 'Tontopf mit frischem Seewasser gefüllt!');
         break;
       }
@@ -1782,10 +1920,12 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     state.wolfTamed = true;
+    n.sprite.setTexture('sdv_dog_lupo', 24);
+    n.sprite.play('lupo-wag');
     n.label?.setText('Hund Lupo');
     state.unlock('wolf');
     state.checkQuest();
-    state.emit('toast', 'Du hast den Wolf gezähmt! Hund Lupo begleitet dich jetzt.');
+    state.emit('toast', 'Du hast den Wolf gezähmt! Hund Lupo wedelt mit dem Schwanz und begleitet dich jetzt.');
   }
 
   private interactPlot(n: Node): void {
@@ -1798,6 +1938,7 @@ export class WorldScene extends Phaser.Scene {
       }
       p.stage = 'tilled';
       this.refreshPlotVisual(n, p);
+      this.playToolActionFeedback('hoe');
       state.unlock('ackerbau');
       state.emit('toast', 'Boden mit der Steinhacke aufgelockert!');
     } else if (p.stage === 'tilled') {
@@ -1808,6 +1949,7 @@ export class WorldScene extends Phaser.Scene {
       state.add('samen', -1);
       p.stage = 'seeded';
       this.refreshPlotVisual(n, p);
+      this.playToolActionFeedback('gather');
       state.emit('toast', 'Wildkorn ausgesät! Jetzt mit Wasser gießen.');
     } else if (p.stage === 'seeded') {
       if (state.count('wasser') <= 0) {
@@ -1819,6 +1961,7 @@ export class WorldScene extends Phaser.Scene {
       p.stage = 'watered';
       p.wateredAt = Date.now();
       this.refreshPlotVisual(n, p);
+      this.playToolActionFeedback('water');
       state.bump('watered_plot', 1);
       state.emit('toast', 'Feld gegossen! Nach kurzer Zeit (oder 1× Schlafen) ist es reif.');
     } else if (p.stage === 'watered') {
@@ -1830,10 +1973,47 @@ export class WorldScene extends Phaser.Scene {
       }
       p.stage = 'tilled';
       this.refreshPlotVisual(n, p);
+      this.playToolActionFeedback('gather');
       state.add('getreide', 2);
       state.add('samen', 2);
       state.bump('harvested_wheat', 1);
       state.emit('toast', 'Ernte eingebracht: +2 Getreide, +2 Samen!');
+    }
+  }
+
+  /**
+   * Taktiles Aktions-Feedback beim Benutzen von Werkzeugen (Axt, Hacke, Sichel, Wasser).
+   */
+  private playToolActionFeedback(type: 'chop' | 'mine' | 'hoe' | 'water' | 'gather'): void {
+    if (!this.player) return;
+    this.tweens.add({
+      targets: this.player,
+      scaleX: 1.18,
+      scaleY: 0.82,
+      duration: 80,
+      yoyo: true,
+      ease: 'Back.easeOut',
+    });
+
+    const colors = {
+      chop: 0x96603a,  // Holzspäne
+      mine: 0xc4c7cc,  // Steinsplitter
+      hoe: 0x664426,   // Ackererde
+      water: 0x67e8f9, // Wassertropfen
+      gather: 0x86efac,// Pflanzenreste
+    };
+    const col = colors[type] ?? 0xffffff;
+    for (let i = 0; i < 4; i++) {
+      const p = this.add.circle(this.player.x + Phaser.Math.Between(-6, 6), this.player.y + 12 + Phaser.Math.Between(-4, 4), 2, col, 0.9).setDepth(4000);
+      this.tweens.add({
+        targets: p,
+        x: p.x + Phaser.Math.Between(-14, 14),
+        y: p.y - Phaser.Math.Between(8, 20),
+        alpha: 0,
+        scale: 0.4,
+        duration: 300,
+        onComplete: () => p.destroy(),
+      });
     }
   }
 
