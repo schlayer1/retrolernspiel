@@ -143,6 +143,7 @@ export class BootScene extends Phaser.Scene {
     this.load.spritesheet('sdv_duck', 'assets/fauna/duck.png', { frameWidth: 16, frameHeight: 16 });
     this.load.spritesheet('sdv_critters', 'assets/fauna/critters.png', { frameWidth: 16, frameHeight: 16 });
     this.load.spritesheet('sdv_crops', 'assets/flora/crops.png', { frameWidth: 16, frameHeight: 32 });
+    this.load.spritesheet('wheat_stages', 'assets/flora/wheat_stages.png', { frameWidth: 20, frameHeight: 28 });
     this.load.spritesheet('sdv_cave_plants', 'assets/flora/cave_plants.png', { frameWidth: 16, frameHeight: 24 });
     this.load.spritesheet('sdv_bushes', 'assets/flora/bushes.png', { frameWidth: 32, frameHeight: 32 });
 

@@ -1197,36 +1197,33 @@ export class WorldScene extends Phaser.Scene {
       n.sprite.setTexture('farm_soil_dry').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
     } else if (p.stage === 'seeded') {
       n.sprite.setTexture('farm_soil_seeded').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
-      // Stufe 0: Wildkorn-Samenkörner in der aufgelockerten Erde
-      const frameIdx = 11 * 16 + 0;
+      // Stufe 0: Ausgesäte Samenkörner
       if (!n.cropSprite) {
-        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 2, 'sdv_crops', frameIdx).setDepth(n.sprite.depth + 1);
+        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 2, 'wheat_stages', 0).setDepth(n.sprite.depth + 1);
       } else {
-        n.cropSprite.setTexture('sdv_crops', frameIdx).setVisible(true).setDepth(n.sprite.depth + 1);
+        n.cropSprite.setTexture('wheat_stages', 0).setVisible(true).setDepth(n.sprite.depth + 1);
       }
     } else if (p.stage === 'watered') {
       n.sprite.setTexture('farm_soil_wet').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
       // Dynamische Zwischenstufen während des Wachstumszeitraffers
       const elapsed = Date.now() - p.wateredAt;
       const progress = Math.min(0.99, Math.max(0, elapsed / CROP_MS));
-      let stageFrame = 1; // Keimling
-      if (progress >= 0.66) stageFrame = 3; // Hoher Halm mit grünen Ähren
-      else if (progress >= 0.33) stageFrame = 2; // Grüner Trieb
+      let stageFrame = 1; // Zarte grüne Keimlinge
+      if (progress >= 0.66) stageFrame = 3; // Hohes Weizenfeld mit reifenden Ähren
+      else if (progress >= 0.33) stageFrame = 2; // Dichter grüner Getreidebusch
 
-      const frameIdx = 11 * 16 + stageFrame;
       if (!n.cropSprite) {
-        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 6, 'sdv_crops', frameIdx).setDepth(n.sprite.depth + 1);
+        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 4, 'wheat_stages', stageFrame).setDepth(n.sprite.depth + 1);
       } else {
-        n.cropSprite.setTexture('sdv_crops', frameIdx).setVisible(true).setDepth(n.sprite.depth + 1);
+        n.cropSprite.setTexture('wheat_stages', stageFrame).setVisible(true).setDepth(n.sprite.depth + 1);
       }
     } else if (p.stage === 'ripe') {
       n.sprite.setTexture('farm_soil_dry').setDisplaySize(24, 24).setOrigin(0.5, 0.5).setAlpha(1);
-      // Stufe 4: Vollreifer, goldgelber neolithischer Weizen bereit zur Ernte mit der Sichel
-      const frameIdx = 11 * 16 + 4;
+      // Stufe 4: Vollreifer, goldgelber Weizen (prachtvolle Ernte)
       if (!n.cropSprite) {
-        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 8, 'sdv_crops', frameIdx).setDepth(n.sprite.depth + 1);
+        n.cropSprite = this.add.image(n.sprite.x, n.sprite.y - 6, 'wheat_stages', 4).setDepth(n.sprite.depth + 1);
       } else {
-        n.cropSprite.setTexture('sdv_crops', frameIdx).setVisible(true).setDepth(n.sprite.depth + 1);
+        n.cropSprite.setTexture('wheat_stages', 4).setVisible(true).setDepth(n.sprite.depth + 1);
       }
     }
   }
