@@ -1,0 +1,36 @@
+# Dependencies & Caches
+node_modules
+.npm
+.cache
+
+# Raw Assets, Archives & Heavy Binaries
+Assets/
+assets_raw/
+raw_assets/
+downloaded assets/
+Downloaded Assets/
+better assets/
+Spritesheets/
+*.rar
+*.zip
+*.7z
+*.tar.gz
+*.apkm
+*.apk
+
+# Documentation, Scratch & Test Artifacts
+docs/
+scratch/
+verify_output/
+/*.pdf
+!public/**/*.pdf
+/*.png
+/*.jpg
+/*.jpeg
+!public/**
+
+# Git & System
+.git
+.github
+.DS_Store
+*.log

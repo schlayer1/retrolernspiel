@@ -1,7 +1,34 @@
+# Dependencies
 node_modules/
+
+# Production Build Output
 dist/
+dist-ssr/
+
+# Local Environment & Logs
+*.local
+.env*.local
 .DS_Store
-downloaded assets/
 *.log
+
+# Scratch, Testing & Browser Audits
 scratch/
+verify_output/
+*.bak
+
+# Loose test images in project root
+/*.png
+/*.jpg
+
+# Raw & Heavy Asset Archives (Lokal belassen, niemals in Git)
+Assets/
+assets_raw/
+raw_assets/
+downloaded assets/
+Downloaded Assets/
 better assets/
+Spritesheets/
+*.rar
+*.zip
+*.7z
+*.tar.gz
